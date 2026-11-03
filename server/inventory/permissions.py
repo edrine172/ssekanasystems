@@ -17,6 +17,11 @@ class RoleModelPermissions(BasePermission):
         'purchase-summary': {'GET': ('view_purchase', 'view_purchaseitem')},
         'sales-summary': {'GET': ('view_sale', 'view_saleitem')},
         'expenses-summary': {'GET': ('view_expense', 'view_expensebudget')},
+        'expenses-balance-sheet': {
+            'GET': (
+                'view_balancesheetaccount', 'view_product', 'view_customer', 'view_supplier', 'view_expense',
+            ),
+        },
         'reports-summary': {
             'GET': (
                 'view_product', 'view_stockmovement', 'view_sale', 'view_purchase',

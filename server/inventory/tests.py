@@ -19,7 +19,7 @@ from django.test import Client
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from .models import BottleCustomerPO, BottleDelivery, BottleProduct, ClientMaterial, ClientMaterialPO, ClientMaterialReceipt, Category, Customer, CustomerLedgerEntry, Expense, ExpenseBudget, Notification, PayrollLine, PayrollRun, Product, Purchase, PurchaseItem, Sale, SaleItem, SecurityAuditEvent, StaffAttendance, StaffMember, StaffTask, StaffTaskEntry, StockMovement, Supplier, SupplierLedgerEntry, SystemSetting
+from .models import BalanceSheetAccount, BottleCustomerPO, BottleDelivery, BottleProduct, ClientMaterial, ClientMaterialPO, ClientMaterialReceipt, Category, Customer, CustomerLedgerEntry, Expense, ExpenseBudget, Notification, PayrollLine, PayrollRun, Product, Purchase, PurchaseItem, Sale, SaleItem, SecurityAuditEvent, StaffAttendance, StaffMember, StaffTask, StaffTaskEntry, StockMovement, Supplier, SupplierLedgerEntry, SystemSetting
 
 
 class AdminAPITestCase(APITestCase):
@@ -2363,6 +2363,83 @@ class ExpenseDashboardTests(AdminAPITestCase):
         self.assertEqual(report['net_profit'], '-40.00')
         self.assertEqual(report['daily_series'][-1]['net_profit'], -40.0)
 
+    def test_balance_sheet_combines_tracked_balances_and_manual_accounts(self):
+        category = Category.objects.create(name='Balance sheet stock')
+        Product.objects.create(
+            sku='BS-INV-001',
+            name='Balance sheet stock',
+            category=category,
+            quantity=5,
+            unit_price='10.00',
+            cost_price='4.00',
+        )
+        Customer.objects.create(customer_code='CUST-BS-001', name='Balance sheet customer', outstanding_balance='30.00')
+        Supplier.objects.create(name='Balance sheet supplier', outstanding_balance='40.00')
+        self.create_expense(status='approved', amount_before_tax='10.00', tax_amount='0.00')
+        incomplete_sheet = self.client.get('/api/expenses/balance-sheet/').data
+        self.assertFalse(incomplete_sheet['current_complete'])
+        self.assertFalse(incomplete_sheet['is_balanced'])
+        self.assertFalse(incomplete_sheet['prior_complete'])
+        self.assertFalse(incomplete_sheet['is_prior_balanced'])
+        BalanceSheetAccount.objects.update(amount='0.00', prior_amount='0.00')
+        manual_accounts = [
+            ('cash_and_cash_equivalents', {'amount': '50.00', 'prior_amount': '10.00'}),
+            ('noncurrent_term_debt', {'amount': '20.00', 'prior_amount': '0.00'}),
+            ('common_stock_and_additional_paid_in_capital', {'amount': '30.00', 'prior_amount': '15.00'}),
+            ('accounts_receivable_net', {'amount': '0.00', 'prior_amount': '2.00'}),
+            ('inventories', {'amount': '0.00', 'prior_amount': '8.00'}),
+            ('accounts_payable', {'amount': '0.00', 'prior_amount': '4.00'}),
+            ('other_current_liabilities', {'amount': '0.00', 'prior_amount': '1.00'}),
+        ]
+        for category, balances in manual_accounts:
+            response = self.client.patch(f'/api/balance-sheet-accounts/{category}/', balances, format='json')
+            self.assertEqual(response.status_code, 200)
+
+        response = self.client.get('/api/expenses/balance-sheet/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['current_year'], timezone.localdate().year)
+        self.assertEqual(response.data['prior_year'], timezone.localdate().year - 1)
+        self.assertEqual(response.data['total_assets'], '100.00')
+        self.assertEqual(response.data['total_liabilities'], '70.00')
+        self.assertEqual(response.data['total_equity'], '30.00')
+        self.assertEqual(response.data['difference'], '0.00')
+        self.assertTrue(response.data['is_balanced'])
+        self.assertTrue(response.data['current_complete'])
+        self.assertEqual(response.data['assets']['prior_total'], '20.00')
+        self.assertEqual(response.data['liabilities']['prior_total'], '5.00')
+        self.assertEqual(response.data['equity']['prior_total'], '15.00')
+        self.assertEqual(response.data['prior_difference'], '0.00')
+        self.assertTrue(response.data['is_prior_balanced'])
+        self.assertTrue(response.data['prior_complete'])
+        self.assertEqual(response.data['as_of_date'], timezone.localdate().isoformat())
+        self.assertEqual(
+            next(
+                row['current_amount']
+                for group in response.data['liabilities']['groups']
+                for row in group['rows']
+                if row['category'] == 'other_current_liabilities'
+            ),
+            '10.00',
+        )
+        all_rows = [
+            row
+            for section in ('assets', 'liabilities', 'equity')
+            for group in response.data[section]['groups']
+            for row in group['rows']
+        ]
+        self.assertEqual(len(all_rows), 19)
+        self.assertEqual(len({row['category'] for row in all_rows}), 19)
+
+        negative_equity = self.client.patch(
+            '/api/balance-sheet-accounts/accumulated_other_comprehensive_income_loss/',
+            {'amount': '-5.00', 'prior_amount': '-406.00'},
+            format='json',
+        )
+        self.assertEqual(negative_equity.status_code, 200)
+        self.assertEqual(negative_equity.data['amount'], '-5.00')
+        self.assertEqual(negative_equity.data['prior_amount'], '-406.00')
+
 
 class DashboardAccountTests(APITestCase):
     def test_registration_accepts_gmail_addresses(self):
@@ -2401,12 +2478,14 @@ class DashboardAccountTests(APITestCase):
             '/api/purchases/summary/',
             '/api/sales/summary/',
             '/api/expenses/summary/',
+            '/api/expenses/balance-sheet/',
             '/api/reports/summary/',
             '/api/staff/dashboard/',
         ):
             with self.subTest(endpoint=endpoint):
                 self.assertEqual(self.client.get(endpoint).status_code, 200)
         self.assertEqual(self.client.post('/api/products/', {}, format='json').status_code, 403)
+        self.assertEqual(self.client.post('/api/balance-sheet-accounts/', {}, format='json').status_code, 403)
 
     def test_login_logout_and_registration_validation(self):
         duplicate = self.client.post('/api/account/register/', {

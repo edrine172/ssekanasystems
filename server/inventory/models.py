@@ -410,6 +410,40 @@ class ExpenseBudget(models.Model):
         return f'{self.category}: {self.monthly_limit}'
 
 
+class BalanceSheetAccount(models.Model):
+    class Category(models.TextChoices):
+        CASH_AND_CASH_EQUIVALENTS = 'cash_and_cash_equivalents', 'Cash and cash equivalents'
+        CURRENT_MARKETABLE_SECURITIES = 'current_marketable_securities', 'Marketable securities'
+        ACCOUNTS_RECEIVABLE_NET = 'accounts_receivable_net', 'Accounts receivable, net'
+        INVENTORIES = 'inventories', 'Inventories'
+        VENDOR_NON_TRADE_RECEIVABLES = 'vendor_non_trade_receivables', 'Vendor non-trade receivables'
+        OTHER_CURRENT_ASSETS = 'other_current_assets', 'Other current assets'
+        NONCURRENT_MARKETABLE_SECURITIES = 'noncurrent_marketable_securities', 'Marketable securities'
+        PROPERTY_PLANT_EQUIPMENT_NET = 'property_plant_equipment_net', 'Property, plant and equipment, net'
+        OTHER_NONCURRENT_ASSETS = 'other_noncurrent_assets', 'Other non-current assets'
+        ACCOUNTS_PAYABLE = 'accounts_payable', 'Accounts payable'
+        OTHER_CURRENT_LIABILITIES = 'other_current_liabilities', 'Other current liabilities'
+        DEFERRED_REVENUE = 'deferred_revenue', 'Deferred revenue'
+        COMMERCIAL_PAPER = 'commercial_paper', 'Commercial paper'
+        CURRENT_TERM_DEBT = 'current_term_debt', 'Term debt'
+        NONCURRENT_TERM_DEBT = 'noncurrent_term_debt', 'Term debt'
+        OTHER_NONCURRENT_LIABILITIES = 'other_noncurrent_liabilities', 'Other non-current liabilities'
+        COMMON_STOCK_AND_ADDITIONAL_PAID_IN_CAPITAL = 'common_stock_and_additional_paid_in_capital', 'Common stock and additional paid-in capital'
+        RETAINED_EARNINGS = 'retained_earnings', 'Retained earnings'
+        ACCUMULATED_OTHER_COMPREHENSIVE_INCOME_LOSS = 'accumulated_other_comprehensive_income_loss', 'Accumulated other comprehensive income / (loss)'
+
+    category = models.CharField(max_length=64, choices=Category.choices, unique=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    prior_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['category']
+
+    def __str__(self):
+        return f'{self.get_category_display()}: {self.amount}'
+
+
 class SecurityAuditEvent(models.Model):
     actor = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_security_events')
     action = models.CharField(max_length=80)

@@ -594,6 +594,83 @@ export interface ExpenseSummary {
   expenses: Expense[];
 }
 
+export type BalanceSheetCategory =
+  | 'cash_and_cash_equivalents'
+  | 'current_marketable_securities'
+  | 'accounts_receivable_net'
+  | 'inventories'
+  | 'vendor_non_trade_receivables'
+  | 'other_current_assets'
+  | 'noncurrent_marketable_securities'
+  | 'property_plant_equipment_net'
+  | 'other_noncurrent_assets'
+  | 'accounts_payable'
+  | 'other_current_liabilities'
+  | 'deferred_revenue'
+  | 'commercial_paper'
+  | 'current_term_debt'
+  | 'noncurrent_term_debt'
+  | 'other_noncurrent_liabilities'
+  | 'common_stock_and_additional_paid_in_capital'
+  | 'retained_earnings'
+  | 'accumulated_other_comprehensive_income_loss';
+
+export interface BalanceSheetAccount {
+  id: number;
+  category: BalanceSheetCategory;
+  amount: string | null;
+  prior_amount: string | null;
+  updated_at: string;
+}
+
+export interface BalanceSheetLine {
+  category: BalanceSheetCategory;
+  name: string;
+  current_amount: string | null;
+  manual_current_amount: string | null;
+  prior_amount: string | null;
+  source: string;
+  updated_at: string | null;
+  editable_current: boolean;
+  current_complete: boolean;
+  prior_complete: boolean;
+}
+
+export interface BalanceSheetGroup {
+  title: string;
+  current_total: string;
+  prior_total: string;
+  current_complete: boolean;
+  prior_complete: boolean;
+  rows: BalanceSheetLine[];
+}
+
+export interface BalanceSheetSection {
+  current_total: string;
+  prior_total: string;
+  current_complete: boolean;
+  prior_complete: boolean;
+  groups: BalanceSheetGroup[];
+}
+
+export interface BalanceSheetSummary {
+  as_of_date: string;
+  current_year: number;
+  prior_year: number;
+  assets: BalanceSheetSection;
+  liabilities: BalanceSheetSection;
+  equity: BalanceSheetSection;
+  total_assets: string;
+  total_liabilities: string;
+  total_equity: string;
+  difference: string;
+  is_balanced: boolean;
+  current_complete: boolean;
+  prior_difference: string;
+  is_prior_balanced: boolean;
+  prior_complete: boolean;
+}
+
 export interface StaffMember {
   id: number;
   employee_number: string;
@@ -1088,6 +1165,9 @@ export const api = {
     return request<Expense[]>(`/expenses/${params.size ? `?${params}` : ''}`);
   },
   expenseSummary: (month?: string) => request<ExpenseSummary>(`/expenses/summary/${month ? `?month=${month}` : ''}`),
+  balanceSheet: () => request<BalanceSheetSummary>('/expenses/balance-sheet/'),
+  updateBalanceSheetAccount: (category: BalanceSheetCategory, account: Partial<Pick<BalanceSheetAccount, 'amount' | 'prior_amount'>>) =>
+    request<BalanceSheetAccount>(`/balance-sheet-accounts/${category}/`, { method: 'PATCH', body: JSON.stringify(account) }),
   createExpense: (expense: ExpenseInput) =>
     request<Expense>('/expenses/', { method: 'POST', body: JSON.stringify(expense) }),
   updateExpense: (id: number, expense: Partial<Pick<Expense, 'status' | 'receipt_received' | 'receipt_verified'>>) =>

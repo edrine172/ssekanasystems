@@ -2,7 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from .backups import download_database_backup, restore_database_backup
 from .access_control import AccessDashboardViewSet, AccessGroupViewSet, AccessPermissionViewSet, AccessUserViewSet, access_csrf, access_login, access_logout, access_session, account_login, account_logout, account_register, account_session
-from .views import BottleCustomerPOViewSet, BottleProductViewSet, CategoryViewSet, ClientMaterialPOViewSet, ClientMaterialViewSet, CustomerViewSet, ExpenseBudgetViewSet, ExpenseViewSet, NotificationViewSet, PayrollRunViewSet, ProductViewSet, PurchaseViewSet, SaleViewSet, StaffAttendanceViewSet, StaffMemberViewSet, StaffTaskAssignmentViewSet, StaffTaskEntryViewSet, StaffTaskViewSet, StockMovementViewSet, SupplierViewSet, checkout, dashboard_summary, exchange_rates, expenses_bulk_upload, expenses_summary, inventory_adjustment, purchase_summary, reports_summary, sales_summary, staff_dashboard, system_settings
+from .views import BalanceSheetAccountViewSet, BottleCustomerPOViewSet, BottleProductViewSet, CategoryViewSet, ClientMaterialPOViewSet, ClientMaterialViewSet, CustomerViewSet, ExpenseBudgetViewSet, ExpenseViewSet, NotificationViewSet, PayrollRunViewSet, ProductViewSet, PurchaseViewSet, SaleViewSet, StaffAttendanceViewSet, StaffMemberViewSet, StaffTaskAssignmentViewSet, StaffTaskEntryViewSet, StaffTaskViewSet, StockMovementViewSet, SupplierViewSet, balance_sheet_summary, checkout, dashboard_summary, exchange_rates, expenses_bulk_upload, expenses_summary, inventory_adjustment, purchase_summary, reports_summary, sales_summary, staff_dashboard, system_settings
 
 router = DefaultRouter()
 router.register('products', ProductViewSet)
@@ -12,6 +12,7 @@ router.register('customers', CustomerViewSet)
 router.register('suppliers', SupplierViewSet)
 router.register('expenses', ExpenseViewSet)
 router.register('expense-budgets', ExpenseBudgetViewSet)
+router.register('balance-sheet-accounts', BalanceSheetAccountViewSet)
 router.register('staff/workers', StaffMemberViewSet, basename='staff-worker')
 router.register('staff/attendance', StaffAttendanceViewSet, basename='staff-attendance')
 router.register('staff/tasks', StaffTaskViewSet, basename='staff-task')
@@ -47,6 +48,7 @@ urlpatterns = [
     path('sales/summary/', sales_summary, name='sales-summary'),
     path('reports/summary/', reports_summary, name='reports-summary'),
     path('expenses/summary/', expenses_summary, name='expenses-summary'),
+    path('expenses/balance-sheet/', balance_sheet_summary, name='expenses-balance-sheet'),
     path('expenses/bulk-upload/', expenses_bulk_upload, name='expenses-bulk-upload'),
     path('settings/', system_settings, name='system-settings'),
     path('exchange-rates/', exchange_rates, name='exchange-rates'),

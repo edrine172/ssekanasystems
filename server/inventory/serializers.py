@@ -2,7 +2,7 @@ from decimal import Decimal
 from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import serializers
-from .models import BottleCustomerPO, BottleCustomerPOLine, BottleDelivery, BottleDeliveryLine, BottleProduct, Category, ClientMaterial, ClientMaterialPO, ClientMaterialReceipt, Customer, CustomerLedgerEntry, Expense, ExpenseBudget, Notification, PayrollLine, PayrollRun, Product, Purchase, PurchaseItem, Sale, SaleItem, StaffAttendance, StaffMember, StaffTask, StaffTaskAssignment, StaffTaskEntry, StockMovement, Supplier, SupplierLedgerEntry
+from .models import BalanceSheetAccount, BottleCustomerPO, BottleCustomerPOLine, BottleDelivery, BottleDeliveryLine, BottleProduct, Category, ClientMaterial, ClientMaterialPO, ClientMaterialReceipt, Customer, CustomerLedgerEntry, Expense, ExpenseBudget, Notification, PayrollLine, PayrollRun, Product, Purchase, PurchaseItem, Sale, SaleItem, StaffAttendance, StaffMember, StaffTask, StaffTaskAssignment, StaffTaskEntry, StockMovement, Supplier, SupplierLedgerEntry
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -672,6 +672,16 @@ class ExpenseBudgetSerializer(serializers.ModelSerializer):
         model = ExpenseBudget
         fields = ['id', 'category', 'monthly_limit', 'cost_center', 'manager', 'updated_at']
         read_only_fields = ['id', 'updated_at']
+
+
+class BalanceSheetAccountSerializer(serializers.ModelSerializer):
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
+    prior_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
+
+    class Meta:
+        model = BalanceSheetAccount
+        fields = ['id', 'category', 'amount', 'prior_amount', 'updated_at']
+        read_only_fields = ['id', 'category', 'updated_at']
 
 
 class StaffMemberSerializer(serializers.ModelSerializer):
