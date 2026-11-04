@@ -979,7 +979,7 @@ class StaffPayrollTests(APITestCase):
             '2025-02-11': (9, '4000.00'),
             '2025-02-09': (15, '7000.00'),
             '2025-02-16': (12, '6000.00'),
-            '2025-02-23': (8, '4000.00'),
+            '2025-02-23': (10, '5000.00'),
             '2025-02-02': (7, '0.00'),
         }
         for work_date, (units, _) in expected_wages.items():
@@ -1001,22 +1001,47 @@ class StaffPayrollTests(APITestCase):
 
         dashboard = self.client.get('/api/staff/dashboard/?period=2025-02').data
         self.assertEqual(dashboard['workers'][0]['period_days_worked'], 12)
-        self.assertEqual(dashboard['workers'][0]['period_gross'], Decimal('58000.00'))
-        self.assertEqual(dashboard['summary']['gross_total'], Decimal('58000.00'))
+        self.assertEqual(dashboard['workers'][0]['period_gross'], Decimal('59000.00'))
+        self.assertEqual(dashboard['summary']['gross_total'], Decimal('59000.00'))
 
         generated = self.client.post('/api/staff/payroll-runs/generate/', {'period': '2025-02'}, format='json')
         self.assertEqual(generated.status_code, 201)
-        self.assertEqual(generated.data['gross_total'], '58000.00')
+        self.assertEqual(generated.data['gross_total'], '59000.00')
         self.assertEqual(generated.data['lines'][0]['days_worked'], 12)
-        self.assertEqual(generated.data['lines'][0]['withholding'], '5800.00')
+        self.assertEqual(generated.data['lines'][0]['withholding'], '5900.00')
         self.assertEqual(generated.data['lines'][0]['benefits'], '5000.00')
-        self.assertEqual(generated.data['lines'][0]['net_pay'], '47200.00')
+        self.assertEqual(generated.data['lines'][0]['net_pay'], '48100.00')
         locked = self.client.post('/api/staff/attendance/record_day/', {
             'date': '2025-02-03',
             'records': [{'worker': worker_id, 'attended': True, 'output_quantity': 100}],
         }, format='json')
         self.assertEqual(locked.status_code, 400)
         self.assertEqual(StaffAttendance.objects.get(worker_id=worker_id, date='2025-02-03').daily_wage, Decimal('7000.00'))
+
+    def test_sunday_attendance_pays_requested_unit_thresholds(self):
+        worker = self.create_worker(
+            full_name='Sunday Threshold Worker',
+            email='sunday-threshold@example.test',
+            pay_basis='daily',
+        )
+        expected_wages = {
+            '2025-03-02': (8, '4000.00'),
+            '2025-03-09': (10, '5000.00'),
+            '2025-03-16': (12, '6000.00'),
+            '2025-03-23': (15, '7000.00'),
+        }
+
+        for work_date, (units, expected_wage) in expected_wages.items():
+            response = self.client.post('/api/staff/attendance/record_day/', {
+                'date': work_date,
+                'records': [{
+                    'worker': worker.data['id'],
+                    'attended': True,
+                    'output_quantity': units,
+                }],
+            }, format='json')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data[0]['daily_wage'], expected_wage)
 
     def test_supervisor_can_override_daily_wage_below_eight_units(self):
         worker = self.create_worker(pay_basis='daily', benefit_deduction='0.00')

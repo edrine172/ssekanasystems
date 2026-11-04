@@ -32,6 +32,7 @@ DAILY_WAGE_TIERS = (
 SUNDAY_WAGE_TIERS = (
     (15, Decimal('7000.00')),
     (12, Decimal('6000.00')),
+    (10, Decimal('5000.00')),
     (8, Decimal('4000.00')),
 )
 

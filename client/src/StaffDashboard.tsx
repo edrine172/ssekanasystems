@@ -52,18 +52,16 @@ const savedPayrollWorker = () => {
 };
 const dateLabel = (date: string | null) => date ? new Date(date).toLocaleString('en-UG', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : 'Not yet paid';
 const isSunday = (date: string) => { const [year, month, day] = date.split('-').map(Number); return new Date(year, month - 1, day).getDay() === 0; };
-const dailyAttendanceWage = (date: string, attended: boolean, outputQuantity: string | number, payBasis: StaffMember['pay_basis'], wageOverride = '') => {
+const dailyAttendanceWage = (attended: boolean, outputQuantity: string | number, payBasis: StaffMember['pay_basis'], wageOverride = '') => {
   if (!attended || payBasis !== 'daily') return 0;
   const units = Number(outputQuantity);
-  const tierWage = isSunday(date)
-    ? units >= 15 ? 7000 : units >= 12 ? 6000 : units >= 8 ? 4000 : null
-    : units >= 15 ? 7000 : units >= 12 ? 6000 : units >= 10 ? 5000 : units >= 8 ? 4000 : null;
+  const tierWage = units >= 15 ? 7000 : units >= 12 ? 6000 : units >= 10 ? 5000 : units >= 8 ? 4000 : null;
   return tierWage ?? (wageOverride.trim() ? Number(wageOverride) : 0);
 };
 const dailyAttendanceTier = (date: string, outputQuantity: string | number) => {
   const units = Number(outputQuantity);
   return units >= 15 ? '15+ units' : units >= 12 ? '12–14 units' : isSunday(date)
-    ? units >= 8 ? '8–11 units' : 'Below 8 units'
+    ? units >= 10 ? '10–11 units' : units >= 8 ? '8–9 units' : 'Below 8 units'
     : units >= 10 ? '10–11 units' : units >= 8 ? '8–9 units' : 'Below 8 units';
 };
 const targetTierPayout = (unitsWorked: number, tiers: StaffTaskTargetTier[]) =>
@@ -118,7 +116,7 @@ function WorkerForm({ worker, onClose, onSaved }: {
       <div className="catalog-form-row"><label className="catalog-field">Full name<input required maxLength={160} value={form.full_name} onChange={(event) => set('full_name', event.target.value)}/></label><label className="catalog-field">Department<input required maxLength={100} value={form.department} onChange={(event) => set('department', event.target.value)}/></label></div>
       <div className="catalog-form-row"><label className="catalog-field">Job title<input required maxLength={120} value={form.job_title} onChange={(event) => set('job_title', event.target.value)}/></label><label className="catalog-field">Work email<input type="email" value={form.email} onChange={(event) => set('email', event.target.value)}/></label></div>
       <div className="catalog-form-row"><label className="catalog-field">Phone<input value={form.phone} onChange={(event) => set('phone', event.target.value)}/></label><label className="catalog-field">Hire date<input type="date" required value={form.hire_date} onChange={(event) => set('hire_date', event.target.value)}/></label></div>
-      <div className="catalog-form-row"><label className="catalog-field">Pay basis<select value={form.pay_basis} onChange={(event) => set('pay_basis', event.target.value as StaffMember['pay_basis'])}><option value="monthly">Monthly salary</option><option value="hourly">Hourly wage</option><option value="daily">Daily wage</option></select></label>{form.pay_basis === 'daily' ? <p className="staff-form-note">Monday to Saturday: 15+ units earns UGX 7,000; 12–14 earns UGX 6,000; 10–11 earns UGX 5,000; 8–9 earns UGX 4,000; below 8 earns UGX 0. Sunday: 15+ units earns UGX 7,000; 12–14 earns UGX 6,000; 8–11 earns UGX 4,000; below 8 earns UGX 0.</p> : <label className="catalog-field">Pay rate (UGX)<input type="number" min="0.01" step="0.01" required value={form.pay_rate} onChange={(event) => set('pay_rate', event.target.value)}/></label>}</div>
+      <div className="catalog-form-row"><label className="catalog-field">Pay basis<select value={form.pay_basis} onChange={(event) => set('pay_basis', event.target.value as StaffMember['pay_basis'])}><option value="monthly">Monthly salary</option><option value="hourly">Hourly wage</option><option value="daily">Daily wage</option></select></label>{form.pay_basis === 'daily' ? <p className="staff-form-note">Monday to Saturday: 15+ units earns UGX 7,000; 12–14 earns UGX 6,000; 10–11 earns UGX 5,000; 8–9 earns UGX 4,000; below 8 earns UGX 0. Sunday: 15+ units earns UGX 7,000; 12–14 earns UGX 6,000; 10–11 earns UGX 5,000; 8–9 earns UGX 4,000; below 8 earns UGX 0.</p> : <label className="catalog-field">Pay rate (UGX)<input type="number" min="0.01" step="0.01" required value={form.pay_rate} onChange={(event) => set('pay_rate', event.target.value)}/></label>}</div>
       {form.pay_basis === 'hourly' && <label className="catalog-field">Hours per pay period<input type="number" min="0.01" step="0.25" required value={form.hours_per_period} onChange={(event) => set('hours_per_period', event.target.value)}/></label>}
       <div className="catalog-form-row"><label className="catalog-field">Configured withholding (%)<input type="number" min="0" max="100" step="0.01" value={form.withholding_percent} onChange={(event) => set('withholding_percent', event.target.value)}/></label><label className="catalog-field">Benefits deduction (UGX)<input type="number" min="0" step="0.01" value={form.benefit_deduction} onChange={(event) => set('benefit_deduction', event.target.value)}/></label></div>
       {worker && <label className="catalog-field">Employment status<select value={form.status} onChange={(event) => set('status', event.target.value as StaffMember['status'])}><option value="active">Active</option><option value="leave">On leave</option><option value="inactive">Inactive</option></select></label>}
@@ -221,7 +219,7 @@ function DailyAttendancePanel({ period, workers, locked, selectedWorkerId, month
     const draft = drafts[worker.id] ?? { attended: false, output_quantity: '', daily_wage_override: '' };
     return total + (taskAssignedWorkerIds.has(worker.id)
       ? 0
-      : dailyAttendanceWage(date, draft.attended, draft.output_quantity, worker.pay_basis, draft.daily_wage_override));
+      : dailyAttendanceWage(draft.attended, draft.output_quantity, worker.pay_basis, draft.daily_wage_override));
   }, 0);
   const dailyTotal = dailyAttendanceTotal + selectedDateTaskPay;
   const monthTotal = periodWorkers.filter((worker) => worker.pay_basis === 'daily').reduce((total, worker) => total + Number(worker.period_gross || 0), 0);
@@ -683,7 +681,7 @@ function DailyAttendancePanel({ period, workers, locked, selectedWorkerId, month
       const workerTaskEntries = taskEntries.filter((entry) => entry.date === date && entry.worker === worker.id);
       const hasTaskAssignment = workerTaskEntries.length > 0;
       const taskPay = workerTaskEntries.reduce((total, entry) => total + taskEntryPay(entry, taskEntries), 0);
-      const wage = hasTaskAssignment ? 0 : dailyAttendanceWage(date, draft.attended, draft.output_quantity, worker.pay_basis, draft.daily_wage_override);
+      const wage = hasTaskAssignment ? 0 : dailyAttendanceWage(draft.attended, draft.output_quantity, worker.pay_basis, draft.daily_wage_override);
       const needsSupervisorOverride = worker.pay_basis === 'daily' && draft.attended && Number(draft.output_quantity) < 8 && !hasTaskAssignment;
       const taskDraft = taskDrafts[worker.id] ?? { task: '', hours: '', units_worked: '' };
       const assignedTaskIds = new Set(workerTaskEntries.map((entry) => entry.task));
