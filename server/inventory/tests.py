@@ -136,6 +136,32 @@ class DatabaseBackupTests(AdminAPITestCase):
         self.assertFalse(Category.objects.filter(name=existing_category.name).exists())
         self.assertTrue(Category.objects.filter(name=restored_category.name).exists())
 
+    def test_compressed_backup_can_be_restored_and_returns_private_safety_copy(self):
+        existing_category = Category.objects.create(name='Compressed backup pre-restore')
+        restored_category = Category.objects.create(name='Compressed backup restored')
+        fixture = serializers.serialize('json', [self.admin, restored_category]).encode('utf-8')
+        upload = SimpleUploadedFile(
+            'stockpulse-database-backup.json.gz',
+            gzip.compress(fixture),
+            content_type='application/gzip',
+        )
+
+        response = self.client.post('/api/system/backup/restore/', {'backup': upload}, format='multipart')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Cache-Control'], 'private, no-store, max-age=0')
+        self.assertEqual(response['Pragma'], 'no-cache')
+        self.assertEqual(response['X-Content-Type-Options'], 'nosniff')
+        safety_fixture = json.loads(gzip.decompress(b''.join(response.streaming_content)))
+        self.assertEqual(response['X-Restored-Record-Count'], '2')
+        self.assertTrue(any(
+            row['model'] == 'inventory.category'
+            and row['fields']['name'] == existing_category.name
+            for row in safety_fixture
+        ))
+        self.assertFalse(Category.objects.filter(name=existing_category.name).exists())
+        self.assertTrue(Category.objects.filter(name=restored_category.name).exists())
+
     def test_failed_restore_rolls_back_database_changes(self):
         existing_category = Category.objects.create(name='Must remain after failed restore')
         fixture = json.dumps([{

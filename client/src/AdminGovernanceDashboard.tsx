@@ -34,7 +34,11 @@ function formatDate(value: string) {
   return new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-function AdminSignIn({ onSignedIn, error }: { onSignedIn: (username: string, password: string) => Promise<void>; error: string }) {
+function AdminSignIn({ onSignedIn, error, notice }: {
+  onSignedIn: (username: string, password: string) => Promise<void>;
+  error: string;
+  notice: string;
+}) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -59,6 +63,7 @@ function AdminSignIn({ onSignedIn, error }: { onSignedIn: (username: string, pas
       <span className="governance-eyebrow">STOCKPULSE · ADMIN GOVERNANCE</span>
       <h1>Administrator sign-in</h1>
       <p>This separate administration portal is restricted to Django superusers.</p>
+      {notice && <p className="governance-info" role="status">{notice}</p>}
       <label>Username<input autoComplete="username" required value={username} onChange={(event) => setUsername(event.target.value)}/></label>
       <label>Password<input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)}/></label>
       {(formError || error) && <p className="governance-error">{formError || error}</p>}
@@ -110,6 +115,7 @@ export default function AdminGovernanceDashboard() {
   const [admin, setAdmin] = useState<AccessUser | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState('');
+  const [adminNotice, setAdminNotice] = useState('');
   const [activeSection, setActiveSection] = useState<AdminSection>('overview');
   const [search, setSearch] = useState('');
   const [accessData, setAccessData] = useState<AccessDashboardData | null>(null);
@@ -173,10 +179,12 @@ export default function AdminGovernanceDashboard() {
       throw new Error('This portal requires a Django superuser account.');
     }
     setError('');
+    setAdminNotice('');
     setAdmin(result.user);
   }
 
   async function downloadDatabaseBackup() {
+    if (backupBusy || restoreBusy) return;
     setBackupBusy(true);
     setBackupError('');
     setBackupSuccess('');
@@ -200,7 +208,7 @@ export default function AdminGovernanceDashboard() {
 
   async function restoreDatabaseBackup(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!restoreFile || !restoreConfirmed || restoreBusy) return;
+    if (!restoreFile || !restoreConfirmed || backupBusy || restoreBusy) return;
     setRestoreBusy(true);
     setRestoreError('');
     setBackupSuccess('');
@@ -217,7 +225,8 @@ export default function AdminGovernanceDashboard() {
       setRestoreFile(null);
       setRestoreConfirmed(false);
       setRestoreInputKey((key) => key + 1);
-      setBackupSuccess(`Restore completed (${restoredRecords.toLocaleString()} fixture records). Download and securely store the pre-restore safety backup: ${filename}. Sign in again if your session expires.`);
+      setAdminNotice(`Restore completed (${restoredRecords.toLocaleString()} fixture records). The pre-restore safety backup was downloaded as ${filename}. Sign in again using an active superuser account from the restored backup.`);
+      setAdmin(null);
     } catch (cause) {
       setRestoreError(cause instanceof Error ? cause.message : 'Database restore failed; the current database was left unchanged.');
     } finally {
@@ -264,7 +273,7 @@ export default function AdminGovernanceDashboard() {
       .toLowerCase().includes(search.trim().toLowerCase()));
 
   if (checkingSession) return <main className="governance-login-page"><div className="governance-loading"><LoaderCircle size={18}/>Checking administrator session…</div></main>;
-  if (!admin) return <AdminSignIn onSignedIn={signIn} error={error}/>;
+  if (!admin) return <AdminSignIn onSignedIn={signIn} error={error} notice={adminNotice}/>;
 
   return <div className="governance-shell">
     <aside className="governance-sidebar">
@@ -361,7 +370,7 @@ export default function AdminGovernanceDashboard() {
           <span className="governance-eyebrow">DATABASE EXPORT</span>
           <h2>Download a system data backup</h2>
           <p>Exports records from the connected application database, including inventory, sales, finance, staff, user accounts, audit history, and system settings. The export is a compressed JSON fixture (.json.gz).</p>
-          <button type="button" className="governance-button primary" disabled={backupBusy} onClick={() => void downloadDatabaseBackup()}>{backupBusy ? <><LoaderCircle size={14}/>Creating backup…</> : <><Download size={14}/>Create &amp; download backup</>}</button>
+          <button type="button" className="governance-button primary" disabled={backupBusy || restoreBusy} onClick={() => void downloadDatabaseBackup()}>{backupBusy ? <><LoaderCircle size={14}/>Creating backup…</> : <><Download size={14}/>Create &amp; download backup</>}</button>
           {backupError && <p className="governance-backup-error" role="alert">{backupError}</p>}
           {backupSuccess && <p className="governance-backup-success" role="status">{backupSuccess}</p>}
         </div>
@@ -371,10 +380,10 @@ export default function AdminGovernanceDashboard() {
           <h2>Import a system data backup</h2>
           <p>Restore a StockPulse database backup in JSON or compressed .json.gz format. The current database is replaced only after the uploaded fixture is successfully loaded.</p>
           <form className="governance-restore-form" onSubmit={(event) => void restoreDatabaseBackup(event)}>
-            <label className="governance-restore-file">Choose backup file<input key={restoreInputKey} type="file" accept=".json,.gz,application/json,application/gzip" onChange={(event) => { setRestoreFile(event.target.files?.[0] ?? null); setRestoreConfirmed(false); setRestoreError(''); }} disabled={restoreBusy}/></label>
+            <label className="governance-restore-file">Choose backup file<input key={restoreInputKey} type="file" accept=".json,.gz,application/json,application/gzip" onChange={(event) => { setRestoreFile(event.target.files?.[0] ?? null); setRestoreConfirmed(false); setRestoreError(''); }} disabled={backupBusy || restoreBusy}/></label>
             {restoreFile && <p className="governance-restore-selected">Selected: {restoreFile.name} ({(restoreFile.size / 1024 / 1024).toFixed(2)} MB)</p>}
-            <label className="governance-restore-confirm"><input type="checkbox" checked={restoreConfirmed} onChange={(event) => setRestoreConfirmed(event.target.checked)} disabled={!restoreFile || restoreBusy}/>I understand this will replace all current database records with the uploaded backup. A pre-restore safety backup will be downloaded automatically. The backup must include an active superuser account.</label>
-            <button type="submit" className="governance-button danger" disabled={!restoreFile || !restoreConfirmed || restoreBusy}>{restoreBusy ? <><LoaderCircle size={14}/>Validating and restoring…</> : <><Upload size={14}/>Restore database from backup</>}</button>
+            <label className="governance-restore-confirm"><input type="checkbox" checked={restoreConfirmed} onChange={(event) => setRestoreConfirmed(event.target.checked)} disabled={!restoreFile || backupBusy || restoreBusy}/>I understand this will replace all current database records with the uploaded backup. A pre-restore safety backup will be downloaded automatically. The backup must include an active superuser account.</label>
+            <button type="submit" className="governance-button danger" disabled={!restoreFile || !restoreConfirmed || backupBusy || restoreBusy}>{restoreBusy ? <><LoaderCircle size={14}/>Validating and restoring…</> : <><Upload size={14}/>Restore database from backup</>}</button>
             {restoreError && <p className="governance-backup-error" role="alert">{restoreError}</p>}
           </form>
         </div>
