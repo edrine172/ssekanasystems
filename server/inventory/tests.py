@@ -1175,7 +1175,7 @@ class SystemSettingsTests(APITestCase):
         self.assertEqual(invalid_currency.status_code, 400)
         self.assertFalse(SystemSetting.objects.exists())
 
-    @patch('inventory.views.urlopen')
+    @patch('inventory.settings_views.urlopen')
     def test_exchange_rates_are_available_without_authentication(self, mock_urlopen):
         cache.clear()
         payload = {
@@ -1200,7 +1200,7 @@ class SystemSettingsTests(APITestCase):
         cache.clear()
         self.client.force_authenticate(user=None)
 
-        with patch('inventory.views.urlopen', side_effect=URLError('network unavailable')):
+        with patch('inventory.settings_views.urlopen', side_effect=URLError('network unavailable')):
             response = self.client.get('/api/exchange-rates/')
 
         self.assertEqual(response.status_code, 503)

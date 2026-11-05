@@ -2,7 +2,14 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from .backups import download_database_backup, restore_database_backup
 from .access_control import AccessDashboardViewSet, AccessGroupViewSet, AccessPermissionViewSet, AccessUserViewSet, access_csrf, access_login, access_logout, access_session, account_login, account_logout, account_register, account_session
-from .views import BalanceSheetAccountViewSet, BottleCustomerPOViewSet, BottleProductViewSet, CategoryViewSet, ClientMaterialPOViewSet, ClientMaterialViewSet, CustomerViewSet, ExpenseBudgetViewSet, ExpenseViewSet, NotificationViewSet, PayrollRunViewSet, ProductViewSet, PurchaseViewSet, SaleViewSet, StaffAttendanceViewSet, StaffMemberViewSet, StaffTaskAssignmentViewSet, StaffTaskEntryViewSet, StaffTaskViewSet, StockMovementViewSet, SupplierViewSet, balance_sheet_summary, checkout, dashboard_summary, delete_expense_category, delete_expense_type, exchange_rates, expense_options, expenses_bulk_upload, expenses_summary, inventory_adjustment, purchase_summary, reports_summary, sales_summary, staff_dashboard, system_settings
+from .catalog_views import CategoryViewSet, CustomerViewSet, SupplierViewSet
+from .dashboard_views import dashboard_summary
+from .expense_views import ExpenseBudgetViewSet, ExpenseViewSet, delete_expense_category, delete_expense_type, expense_options, expenses_bulk_upload, expenses_summary
+from .finance_views import BalanceSheetAccountViewSet, balance_sheet_summary
+from .inventory_views import BottleCustomerPOViewSet, BottleProductViewSet, ClientMaterialPOViewSet, ClientMaterialViewSet, ProductViewSet, PurchaseViewSet, SaleViewSet, StockMovementViewSet, checkout, inventory_adjustment, purchase_summary, reports_summary, sales_summary
+from .notification_views import NotificationViewSet
+from .settings_views import exchange_rates, system_settings
+from .staff_views import PayrollRunViewSet, StaffAttendanceViewSet, StaffMemberViewSet, StaffTaskAssignmentViewSet, StaffTaskEntryViewSet, StaffTaskViewSet, staff_dashboard
 
 router = DefaultRouter()
 router.register('products', ProductViewSet)
