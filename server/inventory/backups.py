@@ -6,12 +6,13 @@ import tempfile
 from io import BytesIO, StringIO, TextIOWrapper
 from tempfile import SpooledTemporaryFile
 
+from django.apps import apps
 from django.core import serializers
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.core.serializers.base import DeserializationError
 from django.contrib.auth import get_user_model
-from django.db import DatabaseError, connection, transaction
+from django.db import DatabaseError, connection, router, transaction
 from django.http import FileResponse
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
@@ -20,12 +21,26 @@ from rest_framework.permissions import BasePermission
 
 MAX_BACKUP_UPLOAD_BYTES = 50 * 1024 * 1024
 MAX_BACKUP_JSON_BYTES = 100 * 1024 * 1024
+BACKUP_QUERY_CHUNK_SIZE = 100
 
 
 class IsActiveSuperuser(BasePermission):
     def has_permission(self, request, view):
         user = request.user
         return bool(user and user.is_authenticated and user.is_active and user.is_staff and user.is_superuser)
+
+
+def _database_objects():
+    for app_config in apps.get_app_configs():
+        if app_config.models_module is None:
+            continue
+        for model in app_config.get_models():
+            if model._meta.proxy or not router.allow_migrate_model('default', model):
+                continue
+            if model._meta.app_label == 'sessions':
+                continue
+            queryset = model._default_manager.using('default').order_by(model._meta.pk.name)
+            yield from queryset.iterator(chunk_size=BACKUP_QUERY_CHUNK_SIZE)
 
 
 def _create_database_snapshot():
@@ -38,12 +53,7 @@ def _create_database_snapshot():
                     cursor.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
             with gzip.GzipFile(fileobj=backup_file, mode='wb', compresslevel=1, mtime=0) as compressed:
                 with TextIOWrapper(compressed, encoding='utf-8') as fixture:
-                    call_command(
-                        'dumpdata',
-                        format='json',
-                        exclude=['sessions'],
-                        stdout=fixture,
-                    )
+                    serializers.serialize('json', _database_objects(), stream=fixture)
         backup_file.seek(0)
         return backup_file
     except Exception:

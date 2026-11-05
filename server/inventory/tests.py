@@ -15,6 +15,7 @@ from django.test.utils import CaptureQueriesContext
 from django.contrib.sessions.models import Session
 from django.core import serializers
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.models import QuerySet
 from django.test import Client
 from django.utils import timezone
 from rest_framework.test import APITestCase
@@ -76,9 +77,18 @@ class DatabaseBackupTests(AdminAPITestCase):
             category='organization',
         )
 
-        response = self.client.get('/api/system/backup/')
+        original_iterator = QuerySet.iterator
+        chunk_sizes = []
+
+        def capture_chunk_size(queryset, *args, **kwargs):
+            chunk_sizes.append(kwargs.get('chunk_size'))
+            yield from original_iterator(queryset, *args, **kwargs)
+
+        with patch.object(QuerySet, 'iterator', capture_chunk_size):
+            response = self.client.get('/api/system/backup/')
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn(100, chunk_sizes)
         self.assertEqual(response['Content-Type'], 'application/gzip')
         self.assertIn('attachment; filename="stockpulse-database-backup-', response['Content-Disposition'])
         self.assertEqual(response['Cache-Control'], 'private, no-store, max-age=0')
