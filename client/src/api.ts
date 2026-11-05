@@ -547,7 +547,7 @@ export interface Expense {
   description: string;
   category: string;
   cost_center: string;
-  expense_type: 'operational' | 'freight' | 'capital';
+  expense_type: string;
   amount_before_tax: string;
   tax_amount: string;
   total_amount: string;
@@ -590,8 +590,25 @@ export interface ExpenseSummary {
   largest_category: { name: string; total: string; percent: number } | null;
   categories: Array<{ name: string; total: string; count: number; percent: number }>;
   budgets: ExpenseBudget[];
-  daily_series: Array<{ label: string; total: number; operational: number; freight: number; capital: number }>;
+  daily_series: Array<{ label: string; total: number; types: Record<string, number> }>;
+  expense_types: ExpenseTypeOption[];
   expenses: Expense[];
+}
+
+export interface ExpenseCategoryOption {
+  id: number;
+  name: string;
+}
+
+export interface ExpenseTypeOption {
+  id: number;
+  value: string;
+  label: string;
+}
+
+export interface ExpenseOptions {
+  categories: ExpenseCategoryOption[];
+  types: ExpenseTypeOption[];
 }
 
 export type BalanceSheetCategory =
@@ -874,7 +891,11 @@ async function request<T>(
     const confirmed = await requestMutationConfirmation({
       title: deleting ? `Delete ${resource}?` : `${actionName === 'save' ? 'Save' : 'Add'} ${resource}?`,
       message: deleting
-        ? `This will permanently delete ${resource}. This action cannot be undone.`
+        ? normalizedPath.startsWith('/expense-options/categories/')
+          ? 'This removes the category from new expense forms. Existing expense records and budgets will remain unchanged.'
+          : normalizedPath.startsWith('/expense-options/types/')
+            ? 'This removes the type from new expense forms and spend filters. Existing expense records will remain unchanged.'
+          : `This will permanently delete ${resource}. This action cannot be undone.`
         : `This will ${actionName} ${resource}. Do you want to continue?`,
       confirmLabel: deleting ? 'Delete' : actionName === 'save' ? 'Save' : 'Add',
       variant: deleting ? 'danger' : 'default',
@@ -935,6 +956,8 @@ async function request<T>(
 
 function mutationResourceName(path: string) {
   const resources: Array<[RegExp, string]> = [
+    [/\/expense-options\/types\/\d+\/$/, 'this expense type'],
+    [/\/expense-options\/categories\/\d+\/$/, 'this expense category'],
     [/\/sales\/checkout\/$/, 'this sale'],
     [/\/customers\/\d+\/payments\/$/, 'this customer payment'],
     [/\/suppliers\/\d+\/payments\/$/, 'this supplier payment'],
@@ -1165,6 +1188,13 @@ export const api = {
     return request<Expense[]>(`/expenses/${params.size ? `?${params}` : ''}`);
   },
   expenseSummary: (month?: string) => request<ExpenseSummary>(`/expenses/summary/${month ? `?month=${month}` : ''}`),
+  expenseOptions: () => request<ExpenseOptions>('/expense-options/'),
+  createExpenseOption: (kind: 'category' | 'type', name: string) =>
+    request<ExpenseOptions>('/expense-options/', { method: 'POST', body: JSON.stringify({ kind, name }) }),
+  deleteExpenseCategory: (id: number) =>
+    request<ExpenseOptions>(`/expense-options/categories/${id}/`, { method: 'DELETE' }),
+  deleteExpenseType: (id: number) =>
+    request<ExpenseOptions>(`/expense-options/types/${id}/`, { method: 'DELETE' }),
   balanceSheet: () => request<BalanceSheetSummary>('/expenses/balance-sheet/'),
   updateBalanceSheetAccount: (category: BalanceSheetCategory, account: Partial<Pick<BalanceSheetAccount, 'amount'>>) =>
     request<BalanceSheetAccount>(`/balance-sheet-accounts/${category}/`, { method: 'PATCH', body: JSON.stringify(account) }),

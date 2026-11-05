@@ -34,6 +34,16 @@ class RoleModelPermissions(BasePermission):
             'POST': ('add_sale', 'add_saleitem', 'add_stockmovement', 'change_product'),
         },
         'expenses-bulk-upload': {'POST': ('add_expense',)},
+        'expense-options': {
+            'GET': ('view_expense',),
+            'POST': ('add_expense',),
+        },
+        'expense-category-option': {
+            'DELETE': ('delete_expensecategory',),
+        },
+        'expense-type-option': {
+            'DELETE': ('delete_expensetypeoption',),
+        },
         'staff-dashboard': {
             'GET': ('view_staffmember', 'view_staffattendance', 'view_payrollrun'),
         },

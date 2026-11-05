@@ -2367,6 +2367,91 @@ class ExpenseDashboardTests(AdminAPITestCase):
         self.assertEqual(logistics_budget['percent_used'], 120.0)
         self.assertEqual(len(summary['expenses']), 2)
 
+    def test_expense_categories_and_types_can_be_added_and_used(self):
+        created_category = self.client.post('/api/expense-options/', {
+            'kind': 'category',
+            'name': 'Staff Travel',
+        }, format='json')
+        self.assertEqual(created_category.status_code, 201)
+        self.assertIn('Staff Travel', [item['name'] for item in created_category.data['categories']])
+
+        created_type = self.client.post('/api/expense-options/', {
+            'kind': 'type',
+            'name': 'Staff Travel',
+        }, format='json')
+        self.assertEqual(created_type.status_code, 201)
+        travel_type = next(item for item in created_type.data['types'] if item['label'] == 'Staff Travel')
+        self.assertEqual(travel_type['value'], 'staff-travel')
+
+        expense = self.create_expense(
+            category='Staff Travel',
+            expense_type=travel_type['value'],
+        )
+        self.assertEqual(expense.status_code, 201)
+        self.assertEqual(expense.data['category'], 'Staff Travel')
+        self.assertEqual(expense.data['expense_type'], 'staff-travel')
+
+        summary = self.client.get('/api/expenses/summary/').data
+        self.assertIn(travel_type, summary['expense_types'])
+        self.assertEqual(
+            sum(day['types'].get('staff-travel', 0) for day in summary['daily_series']),
+            108.0,
+        )
+
+    def test_duplicate_expense_categories_and_types_are_rejected(self):
+        for payload in (
+            {'kind': 'category', 'name': 'utilities & cloud'},
+            {'kind': 'type', 'name': 'operational'},
+        ):
+            with self.subTest(payload=payload):
+                response = self.client.post('/api/expense-options/', payload, format='json')
+                self.assertEqual(response.status_code, 400)
+
+    def test_expense_category_can_be_removed_without_deleting_historical_records(self):
+        created = self.client.post('/api/expense-options/', {
+            'kind': 'category',
+            'name': 'Staff Travel',
+        }, format='json')
+        category = next(item for item in created.data['categories'] if item['name'] == 'Staff Travel')
+        expense = self.create_expense(category='Staff Travel')
+        budget = self.client.post('/api/expense-budgets/', {
+            'category': 'Staff Travel',
+            'monthly_limit': '500.00',
+            'cost_center': 'People',
+            'manager': 'Elena Vance',
+        }, format='json')
+
+        self.assertEqual(expense.status_code, 201)
+        self.assertEqual(budget.status_code, 201)
+        deleted = self.client.delete(f"/api/expense-options/categories/{category['id']}/")
+
+        self.assertEqual(deleted.status_code, 200)
+        self.assertNotIn('Staff Travel', [item['name'] for item in deleted.data['categories']])
+        self.assertTrue(Expense.objects.filter(category='Staff Travel').exists())
+        self.assertTrue(ExpenseBudget.objects.filter(category='Staff Travel').exists())
+
+    def test_expense_type_can_be_removed_without_deleting_historical_records(self):
+        created = self.client.post('/api/expense-options/', {
+            'kind': 'type',
+            'name': 'Staff Travel',
+        }, format='json')
+        expense_type = next(item for item in created.data['types'] if item['label'] == 'Staff Travel')
+        expense = self.create_expense(expense_type=expense_type['value'])
+
+        self.assertEqual(expense.status_code, 201)
+        deleted = self.client.delete(f"/api/expense-options/types/{expense_type['id']}/")
+
+        self.assertEqual(deleted.status_code, 200)
+        self.assertNotIn(expense_type['value'], [item['value'] for item in deleted.data['types']])
+        self.assertTrue(Expense.objects.filter(expense_type=expense_type['value']).exists())
+
+    def test_expense_requires_a_configured_category_and_type(self):
+        response = self.create_expense(category='Unconfigured', expense_type='unconfigured')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('category', response.data)
+        self.assertIn('expense_type', response.data)
+
     def test_bulk_upload_is_atomic_when_a_row_is_invalid(self):
         response = self.client.post('/api/expenses/bulk-upload/', {
             'expenses': [
@@ -2503,6 +2588,7 @@ class DashboardAccountTests(APITestCase):
             '/api/purchases/summary/',
             '/api/sales/summary/',
             '/api/expenses/summary/',
+            '/api/expense-options/',
             '/api/expenses/balance-sheet/',
             '/api/reports/summary/',
             '/api/staff/dashboard/',
@@ -2510,6 +2596,12 @@ class DashboardAccountTests(APITestCase):
             with self.subTest(endpoint=endpoint):
                 self.assertEqual(self.client.get(endpoint).status_code, 200)
         self.assertEqual(self.client.post('/api/products/', {}, format='json').status_code, 403)
+        self.assertEqual(self.client.post('/api/expense-options/', {
+            'kind': 'type',
+            'name': 'Restricted type',
+        }, format='json').status_code, 403)
+        self.assertEqual(self.client.delete('/api/expense-options/categories/1/').status_code, 403)
+        self.assertEqual(self.client.delete('/api/expense-options/types/1/').status_code, 403)
         self.assertEqual(self.client.post('/api/balance-sheet-accounts/', {}, format='json').status_code, 403)
 
     def test_login_logout_and_registration_validation(self):

@@ -375,7 +375,7 @@ class Expense(models.Model):
     description = models.CharField(max_length=240)
     category = models.CharField(max_length=80)
     cost_center = models.CharField(max_length=80, blank=True)
-    expense_type = models.CharField(max_length=16, choices=ExpenseType.choices, default=ExpenseType.OPERATIONAL)
+    expense_type = models.CharField(max_length=80, default=ExpenseType.OPERATIONAL)
     amount_before_tax = models.DecimalField(max_digits=12, decimal_places=2)
     tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2)
@@ -394,6 +394,27 @@ class Expense(models.Model):
 
     def __str__(self):
         return f'{self.expense_number} · {self.merchant}'
+
+
+class ExpenseCategory(models.Model):
+    name = models.CharField(max_length=80, unique=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class ExpenseTypeOption(models.Model):
+    value = models.SlugField(max_length=80, unique=True)
+    label = models.CharField(max_length=80, unique=True)
+
+    class Meta:
+        ordering = ['label']
+
+    def __str__(self):
+        return self.label
 
 
 class ExpenseBudget(models.Model):

@@ -10,6 +10,7 @@ from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Case, Count, DecimalField, ExpressionWrapper, F, Q, Sum, Value, When
 from django.db.models.functions import Abs, TruncDate
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework import status, viewsets
@@ -17,8 +18,8 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from .models import BalanceSheetAccount, BottleCustomerPO, BottleCustomerPOLine, BottleDelivery, BottleDeliveryLine, BottleProduct, Category, ClientMaterial, ClientMaterialPO, ClientMaterialReceipt, Customer, CustomerLedgerEntry, Expense, ExpenseBudget, Notification, PayrollLine, PayrollRun, Product, Purchase, PurchaseItem, Sale, SaleItem, SecurityAuditEvent, StaffAttendance, StaffMember, StaffTask, StaffTaskAssignment, StaffTaskEntry, StockMovement, Supplier, SupplierLedgerEntry, SystemSetting
-from .serializers import BalanceSheetAccountSerializer, BottleCustomerPOSerializer, BottleDeliverySerializer, BottleProductSerializer, CategorySerializer, ClientMaterialPOSerializer, ClientMaterialReceiptInputSerializer, ClientMaterialSerializer, CustomerLedgerEntrySerializer, CustomerPaymentSerializer, CustomerSerializer, ExpenseBudgetSerializer, ExpenseSerializer, NotificationSerializer, PayrollRunSerializer, ProductSerializer, PurchaseSerializer, SaleCheckoutSerializer, SaleSerializer, StaffAttendanceInputSerializer, StaffAttendanceSerializer, StaffMemberSerializer, StaffTaskAssignmentSerializer, StaffTaskEntryInputSerializer, StaffTaskEntryRemovalInputSerializer, StaffTaskEntrySerializer, StaffTaskSerializer, StockAdjustmentSerializer, StockMovementSerializer, SupplierLedgerEntrySerializer, SupplierPaymentSerializer, SupplierSerializer
+from .models import BalanceSheetAccount, BottleCustomerPO, BottleCustomerPOLine, BottleDelivery, BottleDeliveryLine, BottleProduct, Category, ClientMaterial, ClientMaterialPO, ClientMaterialReceipt, Customer, CustomerLedgerEntry, Expense, ExpenseBudget, ExpenseCategory, ExpenseTypeOption, Notification, PayrollLine, PayrollRun, Product, Purchase, PurchaseItem, Sale, SaleItem, SecurityAuditEvent, StaffAttendance, StaffMember, StaffTask, StaffTaskAssignment, StaffTaskEntry, StockMovement, Supplier, SupplierLedgerEntry, SystemSetting
+from .serializers import BalanceSheetAccountSerializer, BottleCustomerPOSerializer, BottleDeliverySerializer, BottleProductSerializer, CategorySerializer, ClientMaterialPOSerializer, ClientMaterialReceiptInputSerializer, ClientMaterialSerializer, CustomerLedgerEntrySerializer, CustomerPaymentSerializer, CustomerSerializer, ExpenseBudgetSerializer, ExpenseCategorySerializer, ExpenseSerializer, ExpenseTypeOptionSerializer, NotificationSerializer, PayrollRunSerializer, ProductSerializer, PurchaseSerializer, SaleCheckoutSerializer, SaleSerializer, StaffAttendanceInputSerializer, StaffAttendanceSerializer, StaffMemberSerializer, StaffTaskAssignmentSerializer, StaffTaskEntryInputSerializer, StaffTaskEntryRemovalInputSerializer, StaffTaskEntrySerializer, StaffTaskSerializer, StockAdjustmentSerializer, StockMovementSerializer, SupplierLedgerEntrySerializer, SupplierPaymentSerializer, SupplierSerializer
 from .date_ranges import day_range
 from .reports import build_report_summary
 from .permissions import RoleModelPermissions
@@ -545,6 +546,52 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 class ExpenseBudgetViewSet(viewsets.ModelViewSet):
     queryset = ExpenseBudget.objects.all()
     serializer_class = ExpenseBudgetSerializer
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([RoleModelPermissions])
+def expense_options(request):
+    if request.method == 'GET':
+        return Response({
+            'categories': ExpenseCategorySerializer(ExpenseCategory.objects.all(), many=True).data,
+            'types': ExpenseTypeOptionSerializer(ExpenseTypeOption.objects.all(), many=True).data,
+        })
+
+    kind = request.data.get('kind')
+    if kind == 'category':
+        serializer = ExpenseCategorySerializer(data={'name': request.data.get('name', '')})
+    elif kind == 'type':
+        serializer = ExpenseTypeOptionSerializer(data={'label': request.data.get('name', '')})
+    else:
+        raise ValidationError({'kind': 'Choose category or type.'})
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+    return Response({
+        'categories': ExpenseCategorySerializer(ExpenseCategory.objects.all(), many=True).data,
+        'types': ExpenseTypeOptionSerializer(ExpenseTypeOption.objects.all(), many=True).data,
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['DELETE'])
+@permission_classes([RoleModelPermissions])
+def delete_expense_category(request, category_id):
+    category = get_object_or_404(ExpenseCategory, pk=category_id)
+    category.delete()
+    return Response({
+        'categories': ExpenseCategorySerializer(ExpenseCategory.objects.all(), many=True).data,
+        'types': ExpenseTypeOptionSerializer(ExpenseTypeOption.objects.all(), many=True).data,
+    })
+
+
+@api_view(['DELETE'])
+@permission_classes([RoleModelPermissions])
+def delete_expense_type(request, type_id):
+    expense_type = get_object_or_404(ExpenseTypeOption, pk=type_id)
+    expense_type.delete()
+    return Response({
+        'categories': ExpenseCategorySerializer(ExpenseCategory.objects.all(), many=True).data,
+        'types': ExpenseTypeOptionSerializer(ExpenseTypeOption.objects.all(), many=True).data,
+    })
 
 
 class BalanceSheetAccountViewSet(viewsets.ModelViewSet):
@@ -2181,9 +2228,7 @@ def expenses_summary(request):
         series.append({
             'label': f'{cursor.strftime("%b")} {cursor.day}',
             'total': float(sum(type_totals.values(), Decimal('0'))),
-            'operational': float(type_totals.get(Expense.ExpenseType.OPERATIONAL, Decimal('0'))),
-            'freight': float(type_totals.get(Expense.ExpenseType.FREIGHT, Decimal('0'))),
-            'capital': float(type_totals.get(Expense.ExpenseType.CAPITAL, Decimal('0'))),
+            'types': {value: float(amount) for value, amount in type_totals.items()},
         })
         cursor += timedelta(days=1)
     return Response({
@@ -2207,6 +2252,7 @@ def expenses_summary(request):
             'count': row['count'],
             'percent': round(float(row['total'] / (totals['total'] or Decimal('1')) * 100), 1),
         } for row in categories],
+        'expense_types': ExpenseTypeOptionSerializer(ExpenseTypeOption.objects.all(), many=True).data,
         'budgets': budget_rows,
         'daily_series': series,
         'expenses': ExpenseSerializer(expense_records, many=True).data,
