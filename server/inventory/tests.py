@@ -82,7 +82,11 @@ class DatabaseBackupTests(AdminAPITestCase):
         self.assertEqual(response['Content-Type'], 'application/gzip')
         self.assertIn('attachment; filename="stockpulse-database-backup-', response['Content-Disposition'])
         self.assertEqual(response['Cache-Control'], 'private, no-store, max-age=0')
-        fixture = json.loads(gzip.decompress(b''.join(response.streaming_content)))
+        compressed_fixture = b''.join(response.streaming_content)
+        self.assertEqual(compressed_fixture[8], 4)
+        fixture_text = gzip.decompress(compressed_fixture)
+        self.assertNotIn(b'\n  {', fixture_text)
+        fixture = json.loads(fixture_text)
         self.assertTrue(any(
             row['model'] == 'inventory.product'
             and row['fields']['sku'] == 'BACKUP-001'

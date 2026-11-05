@@ -36,12 +36,11 @@ def _create_database_snapshot():
             if use_repeatable_read:
                 with connection.cursor() as cursor:
                     cursor.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
-            with gzip.GzipFile(fileobj=backup_file, mode='wb', mtime=0) as compressed:
+            with gzip.GzipFile(fileobj=backup_file, mode='wb', compresslevel=1, mtime=0) as compressed:
                 with TextIOWrapper(compressed, encoding='utf-8') as fixture:
                     call_command(
                         'dumpdata',
                         format='json',
-                        indent=2,
                         exclude=['sessions'],
                         stdout=fixture,
                     )
