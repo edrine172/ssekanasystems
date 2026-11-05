@@ -86,10 +86,13 @@ def task_pay_totals(entries):
 
 def refresh_unpaid_worker_payroll(worker):
     cent = Decimal('0.01')
+    worker_run_ids = PayrollLine.objects.filter(
+        worker=worker,
+        run__status=PayrollRun.Status.SCHEDULED,
+    ).values('run_id')
     runs = PayrollRun.objects.select_for_update().filter(
-        status=PayrollRun.Status.SCHEDULED,
-        lines__worker=worker,
-    ).distinct().order_by('period')
+        pk__in=worker_run_ids,
+    ).order_by('period')
     for run in runs:
         line = PayrollLine.objects.select_for_update().get(run=run, worker=worker)
         year, month = map(int, run.period.split('-'))

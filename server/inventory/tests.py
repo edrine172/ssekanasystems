@@ -1344,7 +1344,7 @@ class CustomerPOClientWorkflowTests(AdminAPITestCase):
         created = self.client.post('/api/po-client/bottle-orders/', {
             'reference': 'CLIENT-BTL-001',
             'customer': self.customer.id,
-            'items': [{'product': self.bottle.id, 'quantity': 12, 'unit_price': '150.00'}],
+            'items': [{'product': self.product.id, 'quantity': 12, 'unit_price': '150.00'}],
         }, format='json')
 
         self.assertEqual(created.status_code, 201)
@@ -1420,7 +1420,7 @@ class CustomerPOClientWorkflowTests(AdminAPITestCase):
         created = self.client.post('/api/po-client/bottle-orders/', {
             'reference': 'CLIENT-BTL-002',
             'customer': self.customer.id,
-            'items': [{'product': self.bottle.id, 'quantity': 25, 'unit_price': '150.00'}],
+            'items': [{'product': self.product.id, 'quantity': 25, 'unit_price': '150.00'}],
         }, format='json')
         line_id = created.data['items'][0]['id']
 
@@ -1458,7 +1458,7 @@ class CustomerPOClientWorkflowTests(AdminAPITestCase):
         created = self.client.post('/api/po-client/bottle-orders/', {
             'reference': 'CLIENT-BTL-DELETE',
             'customer': self.customer.id,
-            'items': [{'product': self.bottle.id, 'quantity': 12, 'unit_price': '150.00'}],
+            'items': [{'product': self.product.id, 'quantity': 12, 'unit_price': '150.00'}],
         }, format='json')
         line_id = created.data['items'][0]['id']
 
@@ -2020,6 +2020,24 @@ class CustomerAccountTests(AdminAPITestCase):
             credit_limit='100.00',
         )
 
+    def test_customer_list_uses_bounded_aggregate_queries(self):
+        with CaptureQueriesContext(connection) as initial_queries:
+            initial_response = self.client.get('/api/customers/')
+        self.assertEqual(initial_response.status_code, 200)
+
+        for index in range(5):
+            Customer.objects.create(
+                customer_code=f'CUST-Q{index}',
+                name=f'Query Customer {index}',
+            )
+
+        with CaptureQueriesContext(connection) as expanded_queries:
+            response = self.client.get('/api/customers/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 6)
+        self.assertLessEqual(len(expanded_queries), len(initial_queries) + 1)
+
     def test_on_account_sale_updates_customer_history_balance_and_stock(self):
         response = self.client.post('/api/sales/checkout/', {
             'customer': self.customer.id,
@@ -2366,6 +2384,23 @@ class ExpenseDashboardTests(AdminAPITestCase):
         logistics_budget = next(item for item in summary['budgets'] if item['category'] == 'Logistics & Freight')
         self.assertEqual(logistics_budget['percent_used'], 120.0)
         self.assertEqual(len(summary['expenses']), 2)
+
+    def test_expense_summary_query_count_does_not_scale_with_budgets(self):
+        self.create_expense()
+        ExpenseBudget.objects.create(category='Performance 0', monthly_limit='100.00')
+        with CaptureQueriesContext(connection) as initial_queries:
+            initial_response = self.client.get('/api/expenses/summary/')
+        self.assertEqual(initial_response.status_code, 200)
+
+        for index in range(1, 10):
+            ExpenseBudget.objects.create(category=f'Performance {index}', monthly_limit='100.00')
+
+        with CaptureQueriesContext(connection) as expanded_queries:
+            response = self.client.get('/api/expenses/summary/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data['budgets']), 10)
+        self.assertLessEqual(len(expanded_queries), len(initial_queries) + 1)
 
     def test_expense_categories_and_types_can_be_added_and_used(self):
         created_category = self.client.post('/api/expense-options/', {

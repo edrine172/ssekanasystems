@@ -1,6 +1,6 @@
 from decimal import Decimal
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Count, Sum
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -31,9 +31,10 @@ class SupplierViewSet(viewsets.ModelViewSet):
         purchases = supplier.purchases.select_related('supplier').prefetch_related('items__product').all()
         open_purchases = [purchase for purchase in purchases if purchase.status == Purchase.Status.ORDERED]
         received_purchases = [purchase for purchase in purchases if purchase.status == Purchase.Status.RECEIVED]
+        supplier_data = SupplierSerializer(supplier).data
         return Response({
-            'supplier': SupplierSerializer(supplier).data,
-            'lifetime_spend': SupplierSerializer(supplier).data['lifetime_spend'],
+            'supplier': supplier_data,
+            'lifetime_spend': supplier_data['lifetime_spend'],
             'outstanding_balance': str(supplier.outstanding_balance),
             'purchase_orders': PurchaseSerializer(purchases[:50], many=True).data,
             'open_order_value': str(sum(
@@ -71,7 +72,10 @@ class SupplierViewSet(viewsets.ModelViewSet):
 
 
 class CustomerViewSet(viewsets.ModelViewSet):
-    queryset = Customer.objects.all()
+    queryset = Customer.objects.annotate(
+        _lifetime_revenue=Sum('sales__total'),
+        _completed_orders=Count('sales', distinct=True),
+    )
     serializer_class = CustomerSerializer
     http_method_names = ['get', 'post', 'patch', 'head', 'options']
     filter_backends = [SearchFilter, OrderingFilter]

@@ -1,4 +1,5 @@
 from decimal import Decimal
+from django.db.models import Sum
 from rest_framework import serializers
 from .models import Category, Customer, Notification, Product, Purchase, StockMovement, Supplier
 
@@ -58,11 +59,16 @@ class CustomerSerializer(serializers.ModelSerializer):
         return False
 
     def get_lifetime_revenue(self, customer):
-        from django.db.models import Sum
-        total = customer.sales.aggregate(total=Sum('total'))['total'] or Decimal('0')
+        if hasattr(customer, '_lifetime_revenue'):
+            total = customer._lifetime_revenue
+        else:
+            total = customer.sales.aggregate(total=Sum('total'))['total']
+        total = total or Decimal('0')
         return str(total.quantize(Decimal('0.01')))
 
     def get_completed_orders(self, customer):
+        if hasattr(customer, '_completed_orders'):
+            return customer._completed_orders
         return customer.sales.count()
 
     def create(self, validated_data):

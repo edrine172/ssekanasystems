@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -111,17 +111,23 @@ def expenses_summary(request):
     end = next_month - timedelta(days=1)
     expense_records = Expense.objects.filter(expense_date__gte=start, expense_date__lte=end)
     expenses = expense_records.exclude(status=Expense.Status.REJECTED)
-    totals = expenses.aggregate(total=Sum('total_amount'))
-    pending = expenses.filter(status=Expense.Status.PENDING).aggregate(total=Sum('total_amount'))
-    tax_reclaimable = expenses.filter(receipt_verified=True).aggregate(total=Sum('tax_amount'))
+    totals = expenses.aggregate(
+        total=Sum('total_amount'),
+        pending=Sum('total_amount', filter=Q(status=Expense.Status.PENDING)),
+        pending_count=Count('id', filter=Q(status=Expense.Status.PENDING)),
+        tax_reclaimable=Sum('tax_amount', filter=Q(receipt_verified=True)),
+        verified_receipts=Count('id', filter=Q(receipt_verified=True)),
+        expense_count=Count('id'),
+    )
     money = lambda value: str((value or Decimal('0')).quantize(Decimal('0.01')))
     categories = list(expenses.values('category').annotate(
         total=Sum('total_amount'),
         count=Count('id'),
     ).order_by('-total'))
+    spend_by_category = {row['category']: row['total'] or Decimal('0') for row in categories}
     budget_rows = []
     for budget in ExpenseBudget.objects.all():
-        spend = expenses.filter(category=budget.category).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+        spend = spend_by_category.get(budget.category, Decimal('0'))
         budget_rows.append({
             'id': budget.id,
             'category': budget.category,
@@ -150,11 +156,11 @@ def expenses_summary(request):
         'start_date': start.isoformat(),
         'end_date': end.isoformat(),
         'total_expenses': money(totals['total']),
-        'pending_approval': money(pending['total']),
-        'pending_count': expenses.filter(status=Expense.Status.PENDING).count(),
-        'tax_reclaimable': money(tax_reclaimable['total']),
-        'verified_receipts': expenses.filter(receipt_verified=True).count(),
-        'expense_count': expenses.count(),
+        'pending_approval': money(totals['pending']),
+        'pending_count': totals['pending_count'],
+        'tax_reclaimable': money(totals['tax_reclaimable']),
+        'verified_receipts': totals['verified_receipts'],
+        'expense_count': totals['expense_count'],
         'largest_category': {
             'name': largest['category'],
             'total': money(largest['total']),
