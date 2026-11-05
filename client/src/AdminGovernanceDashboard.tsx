@@ -6,7 +6,7 @@ import {
   Upload, UserRound, Users, X, type LucideIcon,
 } from 'lucide-react';
 import {
-  api, formatCurrency as currency, type AccessDashboardData, type AccessUser,
+  AdministratorSessionExpiredError, api, formatCurrency as currency, type AccessDashboardData, type AccessUser,
   type SecurityAuditEvent, type SettingsAuditEvent, type StaffDashboardData,
   type SystemSettingsData,
 } from './api';
@@ -200,7 +200,12 @@ export default function AdminGovernanceDashboard() {
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       setBackupSuccess(`Database backup downloaded: ${filename}`);
     } catch (cause) {
-      setBackupError(cause instanceof Error ? cause.message : 'Database backup could not be created.');
+      if (cause instanceof AdministratorSessionExpiredError) {
+        setAdminNotice(cause.message);
+        setAdmin(null);
+      } else {
+        setBackupError(cause instanceof Error ? cause.message : 'Database backup could not be created.');
+      }
     } finally {
       setBackupBusy(false);
     }
@@ -228,7 +233,12 @@ export default function AdminGovernanceDashboard() {
       setAdminNotice(`Restore completed (${restoredRecords.toLocaleString()} fixture records). The pre-restore safety backup was downloaded as ${filename}. Sign in again using an active superuser account from the restored backup.`);
       setAdmin(null);
     } catch (cause) {
-      setRestoreError(cause instanceof Error ? cause.message : 'Database restore failed; the current database was left unchanged.');
+      if (cause instanceof AdministratorSessionExpiredError) {
+        setAdminNotice(cause.message);
+        setAdmin(null);
+      } else {
+        setRestoreError(cause instanceof Error ? cause.message : 'Database restore failed; the current database was left unchanged.');
+      }
     } finally {
       setRestoreBusy(false);
     }

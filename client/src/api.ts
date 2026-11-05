@@ -7,6 +7,26 @@ const API_BASE = normalizedApiBase
   : (import.meta.env.DEV ? 'http://localhost:8000/api' : '');
 let accessCsrfToken = '';
 
+export class AdministratorSessionExpiredError extends Error {
+  constructor() {
+    super('Your administrator session has expired. Sign in again to continue.');
+    this.name = 'AdministratorSessionExpiredError';
+  }
+}
+
+function isAdministratorSessionExpired(status: number, body: string) {
+  if (status === 401) return true;
+  if (status !== 403 || !body) return false;
+  try {
+    const payload = JSON.parse(body) as { detail?: unknown };
+    return payload.detail === 'Authentication credentials were not provided.'
+      || payload.detail === 'Administrator sign-in required.';
+  } catch (cause) {
+    if (cause instanceof SyntaxError) return false;
+    throw cause;
+  }
+}
+
 async function fetchWithNetworkRetries(url: string, options?: RequestInit) {
   for (let attempt = 0; attempt < 7; attempt += 1) {
     try {
@@ -1036,6 +1056,9 @@ export const api = {
     const response = await fetchGet(apiUrl('/system/backup/'), { credentials: 'include' });
     if (!response.ok) {
       const body = await response.text();
+      if (isAdministratorSessionExpired(response.status, body)) {
+        throw new AdministratorSessionExpiredError();
+      }
       let message = `Database backup failed (HTTP ${response.status}).`;
       if (body) {
         try {
@@ -1075,6 +1098,9 @@ export const api = {
     }
     if (!response.ok) {
       const body = await response.text();
+      if (isAdministratorSessionExpired(response.status, body)) {
+        throw new AdministratorSessionExpiredError();
+      }
       let message = `Database restore failed (HTTP ${response.status}).`;
       if (body) {
         try {
