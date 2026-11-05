@@ -1166,7 +1166,7 @@ export const api = {
   },
   expenseSummary: (month?: string) => request<ExpenseSummary>(`/expenses/summary/${month ? `?month=${month}` : ''}`),
   balanceSheet: () => request<BalanceSheetSummary>('/expenses/balance-sheet/'),
-  updateBalanceSheetAccount: (category: BalanceSheetCategory, account: Partial<Pick<BalanceSheetAccount, 'amount' | 'prior_amount'>>) =>
+  updateBalanceSheetAccount: (category: BalanceSheetCategory, account: Partial<Pick<BalanceSheetAccount, 'amount'>>) =>
     request<BalanceSheetAccount>(`/balance-sheet-accounts/${category}/`, { method: 'PATCH', body: JSON.stringify(account) }),
   createExpense: (expense: ExpenseInput) =>
     request<Expense>('/expenses/', { method: 'POST', body: JSON.stringify(expense) }),

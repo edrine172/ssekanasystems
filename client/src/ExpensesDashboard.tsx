@@ -98,9 +98,8 @@ function BalanceSheetPanel() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<{ category: BalanceSheetCategory; name: string; current_amount: string | null; manual_current_amount: string | null; prior_amount: string | null; source: string; editable_current: boolean } | null>(null);
+  const [editing, setEditing] = useState<{ category: BalanceSheetCategory; name: string; current_amount: string | null; manual_current_amount: string | null; source: string; editable_current: boolean } | null>(null);
   const [currentAmount, setCurrentAmount] = useState('');
-  const [priorAmount, setPriorAmount] = useState('');
 
   async function loadSheet() {
     setLoading(true);
@@ -115,7 +114,6 @@ function BalanceSheetPanel() {
   function startEdit(account: NonNullable<typeof editing>) {
     setEditing(account);
     setCurrentAmount(account.manual_current_amount ?? '');
-    setPriorAmount(account.prior_amount ?? '');
     setShowForm(true);
     setError('');
   }
@@ -126,7 +124,7 @@ function BalanceSheetPanel() {
     setSaving(true);
     setError('');
     try {
-      const input = { prior_amount: priorAmount, ...(editing.editable_current ? { amount: currentAmount } : {}) };
+      const input = { amount: currentAmount };
       await api.updateBalanceSheetAccount(editing.category, input);
       setShowForm(false);
       setNotice('Balance sheet account saved.');
@@ -152,7 +150,7 @@ function BalanceSheetPanel() {
         {sheet && <span>As of {new Date(`${sheet.as_of_date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
       </div>
     </div>
-    <p className="expense-balance-note">Current inventory, receivables, payables, and approved unpaid expenses are linked automatically. Enter the remaining current balances and prior-year closing balances. Verify manually entered amounts against your accounting records.</p>
+    <p className="expense-balance-note">Current inventory, receivables, payables, and approved unpaid expenses are linked automatically. Enter the remaining current balances. Verify manually entered amounts against your accounting records.</p>
     {loading && <div className="catalog-state">Loading balance sheet…</div>}
     {!loading && error && !sheet && <div className="overview-state overview-error"><strong>Could not load balance sheet</strong><span>{error}</span><button className="catalog-button catalog-button-light" type="button" onClick={() => void loadSheet()}><RefreshCw size={13}/>Retry</button></div>}
     {!loading && sheet && <>
@@ -160,36 +158,30 @@ function BalanceSheetPanel() {
         <strong>{!sheet.current_complete ? 'Current year incomplete' : sheet.is_balanced ? 'Current year balanced' : 'Current year out of balance'}</strong>
         <span>{!sheet.current_complete ? 'Enter a current balance for every category to check the totals.' : sheet.is_balanced ? 'Assets equal liabilities plus equity.' : `Difference: ${currency(sheet.difference)}`}</span>
       </div>
-      <div className={`expense-balance-status ${sheet.is_prior_balanced ? 'balanced' : 'unbalanced'}`}>
-        <strong>{!sheet.prior_complete ? `${sheet.prior_year} incomplete` : sheet.is_prior_balanced ? `${sheet.prior_year} balanced` : `${sheet.prior_year} out of balance`}</strong>
-        <span>{!sheet.prior_complete ? 'Enter prior-year closing balances for every category to check the totals.' : sheet.is_prior_balanced ? 'Prior-year assets equal liabilities plus equity.' : `Prior-year difference: ${currency(sheet.prior_difference)}`}</span>
-      </div>
       {error && <div className="expense-inline-error"><CircleAlert size={13}/>{error}</div>}
       {notice && <div className="expense-balance-notice"><Check size={13}/>{notice}<button type="button" onClick={() => setNotice('')} aria-label="Dismiss"><X size={12}/></button></div>}
       <div className="expense-balance-sections">{sections.map((section) => <section key={section.key} className="expense-balance-section">
         <div className="expense-balance-section-heading"><h3>{section.title}</h3><strong>{section.section.current_complete ? currency(section.total) : '—'}</strong></div>
-        <div className="expense-balance-year-heading"><span></span><strong>{sheet.current_year}</strong><strong>{sheet.prior_year}</strong></div>
+        <div className="expense-balance-year-heading"><span></span><strong>{sheet.current_year}</strong><span></span></div>
         {section.section.groups.map((group) => <div className="expense-balance-group" key={group.title}>
-          <div className="expense-balance-group-heading"><strong>{group.title}</strong><span>{group.current_complete ? currency(group.current_total) : '—'}</span><span>{group.prior_complete ? currency(group.prior_total) : '—'}</span></div>
+          <div className="expense-balance-group-heading"><strong>{group.title}</strong><span>{group.current_complete ? currency(group.current_total) : '—'}</span></div>
           {group.rows.map((row) => <div className="expense-balance-row" key={row.category}>
             <div><strong>{row.name}</strong><small>{row.source}</small></div>
             <strong>{formatBalance(row.current_amount)}</strong>
-            <strong>{formatBalance(row.prior_amount)}</strong>
-            <button type="button" className="catalog-icon-button" onClick={() => startEdit(row)} aria-label={`Edit ${row.name} balances`}><Pencil size={12}/></button>
+            {row.editable_current && <button type="button" className="catalog-icon-button" onClick={() => startEdit(row)} aria-label={`Edit ${row.name} balance`}><Pencil size={12}/></button>}
           </div>)}
         </div>)}
       </section>)}</div>
       <div className="expense-balance-totals">
-        {[{ label: 'Total assets', section: sheet.assets, current: sheet.total_assets }, { label: 'Total liabilities', section: sheet.liabilities, current: sheet.total_liabilities }, { label: 'Total shareholders’ equity', section: sheet.equity, current: sheet.total_equity }].map((total) => <div key={total.label}><span>{total.label}</span><strong>{total.section.current_complete ? currency(total.current) : '—'}</strong><small>{sheet.prior_year}: {total.section.prior_complete ? currency(total.section.prior_total) : '—'}</small></div>)}
-        <div><span>Total liabilities and shareholders’ equity</span><strong>{sheet.liabilities.current_complete && sheet.equity.current_complete ? currency(Number(sheet.total_liabilities) + Number(sheet.total_equity)) : '—'}</strong><small>{sheet.prior_year}: {sheet.liabilities.prior_complete && sheet.equity.prior_complete ? currency(Number(sheet.liabilities.prior_total) + Number(sheet.equity.prior_total)) : '—'}</small></div>
+        {[{ label: 'Total assets', section: sheet.assets, current: sheet.total_assets }, { label: 'Total liabilities', section: sheet.liabilities, current: sheet.total_liabilities }, { label: 'Total shareholders’ equity', section: sheet.equity, current: sheet.total_equity }].map((total) => <div key={total.label}><span>{total.label}</span><strong>{total.section.current_complete ? currency(total.current) : '—'}</strong></div>)}
+        <div><span>Total liabilities and shareholders’ equity</span><strong>{sheet.liabilities.current_complete && sheet.equity.current_complete ? currency(Number(sheet.total_liabilities) + Number(sheet.total_equity)) : '—'}</strong></div>
       </div>
     </>}
     {showForm && editing && <div className="catalog-overlay" onMouseDown={(event) => event.target === event.currentTarget && setShowForm(false)}><form className="catalog-modal expense-balance-form" onSubmit={saveAccount}>
-      <div className="catalog-modal-heading"><div><span className="catalog-eyebrow">BALANCE SHEET</span><h2>{editing.name}</h2><p>Enter this account’s current balance and prior-year closing balance.</p></div><button className="catalog-icon-button" type="button" onClick={() => setShowForm(false)} aria-label="Close"><X size={18}/></button></div>
+      <div className="catalog-modal-heading"><div><span className="catalog-eyebrow">BALANCE SHEET</span><h2>{editing.name}</h2><p>Enter this account’s current balance.</p></div><button className="catalog-icon-button" type="button" onClick={() => setShowForm(false)} aria-label="Close"><X size={18}/></button></div>
       <label className="catalog-field">{sheet?.current_year} {editing.editable_current && editing.source !== 'Manual balance' ? 'additional balance' : 'balance'}<input required type="number" step="0.01" value={currentAmount} onChange={(event) => setCurrentAmount(event.target.value)} disabled={!editing.editable_current}/></label>
       {!editing.editable_current && <p className="expense-balance-source-note">This value is calculated from live business records.</p>}
       {editing.editable_current && editing.source !== 'Manual balance' && <p className="expense-balance-source-note">Approved unpaid expenses are included automatically. Add other current liabilities here.</p>}
-      <label className="catalog-field">{sheet?.prior_year} closing balance<input required type="number" step="0.01" value={priorAmount} onChange={(event) => setPriorAmount(event.target.value)}/></label>
       {error && <p className="catalog-form-error">{error}</p>}
       <div className="catalog-modal-actions"><button type="button" className="catalog-button catalog-button-light" onClick={() => setShowForm(false)}>Cancel</button><button className="catalog-button catalog-button-primary" disabled={saving}>{saving ? 'Saving…' : 'Save balance'}</button></div>
     </form></div>}
