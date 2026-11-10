@@ -14,6 +14,15 @@ export class AdministratorSessionExpiredError extends Error {
   }
 }
 
+const administratorSessionExpiredListeners = new Set<() => void>();
+
+export function subscribeToAdministratorSessionExpired(listener: () => void) {
+  administratorSessionExpiredListeners.add(listener);
+  return () => {
+    administratorSessionExpiredListeners.delete(listener);
+  };
+}
+
 function isAdministratorSessionExpired(status: number, body: string) {
   if (status === 401) return true;
   if (status !== 403 || !body) return false;
@@ -25,6 +34,14 @@ function isAdministratorSessionExpired(status: number, body: string) {
     if (cause instanceof SyntaxError) return false;
     throw cause;
   }
+}
+
+async function throwIfAdministratorSessionExpired(response: Response) {
+  if (response.status !== 401 && response.status !== 403) return;
+  const body = await response.clone().text();
+  if (!isAdministratorSessionExpired(response.status, body)) return;
+  administratorSessionExpiredListeners.forEach((listener) => listener());
+  throw new AdministratorSessionExpiredError();
 }
 
 async function fetchWithNetworkRetries(url: string, options?: RequestInit) {
@@ -938,6 +955,10 @@ async function request<T>(
       ? await fetchWithNetworkRetries(apiUrl(path), { ...options, credentials: 'include', headers })
       : await fetch(apiUrl(path), { ...options, credentials: 'include', headers });
 
+  if (normalizedPath !== '/access/login/' && normalizedPath !== '/account/login/') {
+    await throwIfAdministratorSessionExpired(response);
+  }
+
   if (!response.ok && method !== 'GET' && response.status === 403) {
     accessCsrfToken = '';
     await ensureCsrfToken();
@@ -950,6 +971,9 @@ async function request<T>(
       credentials: 'include',
       headers,
     });
+    if (normalizedPath !== '/access/login/' && normalizedPath !== '/account/login/') {
+      await throwIfAdministratorSessionExpired(retryResponse);
+    }
     if (retryResponse.ok) {
       const contentType = retryResponse.headers.get('content-type') ?? '';
       if (retryResponse.status === 204) return undefined as T;

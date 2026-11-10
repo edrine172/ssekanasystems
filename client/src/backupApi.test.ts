@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AdministratorSessionExpiredError, api } from './api';
+import { AdministratorSessionExpiredError, api, subscribeToAdministratorSessionExpired } from './api';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -32,5 +32,20 @@ describe('database backup API', () => {
     )));
 
     await expect(api.downloadSystemBackup()).rejects.toBeInstanceOf(AdministratorSessionExpiredError);
+  });
+});
+
+describe('administrator session handling', () => {
+  it('notifies the app when an API request reports an expired session', async () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeToAdministratorSessionExpired(listener);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ detail: 'Authentication credentials were not provided.' }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
+    )));
+
+    await expect(api.expenseSummary()).rejects.toBeInstanceOf(AdministratorSessionExpiredError);
+    expect(listener).toHaveBeenCalledOnce();
+    unsubscribe();
   });
 });

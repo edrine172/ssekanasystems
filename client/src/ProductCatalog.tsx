@@ -5,7 +5,7 @@ import {
   BriefcaseBusiness, LogOut, MoreHorizontal, Package, Plus, Power, Printer, Search, Settings, SlidersHorizontal,
   Tags, Trash2, Truck, Users, Warehouse, X,
 } from 'lucide-react';
-import { api, formatCurrency as currency, getCurrencyDisplay, setCurrencyDisplay, subscribeCurrencyDisplay, type AccessUser, type Category, type Product, type Supplier } from './api';
+import { api, formatCurrency as currency, getCurrencyDisplay, setCurrencyDisplay, subscribeCurrencyDisplay, subscribeToAdministratorSessionExpired, type AccessUser, type Category, type Product, type Supplier } from './api';
 import { downloadSpreadsheet, readSpreadsheetRows } from './fileFormats';
 import FileActionMenu from './FileActionMenu';
 import type { NotificationDashboard } from './api';
@@ -245,6 +245,14 @@ export default function ProductCatalog() {
       document.removeEventListener('keydown', closeOnEscape);
     };
   }, [accountMenuOpen]);
+
+  useEffect(() => subscribeToAdministratorSessionExpired(() => {
+    setAccessUser(null);
+    setAccessState('signedOut');
+    setAccessError('Your administrator session has expired. Sign in again to continue.');
+    setMountedDashboards(new Set());
+    setAccountMenuOpen(false);
+  }), []);
 
   useEffect(() => {
     if (!isDashboardView(activeView) || accessState !== 'idle' || accessCheckStarted.current) return;
