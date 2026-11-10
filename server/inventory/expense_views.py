@@ -176,6 +176,7 @@ def expenses_summary(request):
         'budgets': budget_rows,
         'daily_series': series,
         'expenses': ExpenseSerializer(expense_records, many=True).data,
+        'can_edit_expenses': request.user.has_perm('inventory.change_expense'),
     })
 
 

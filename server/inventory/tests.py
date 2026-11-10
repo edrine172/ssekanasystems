@@ -20,7 +20,7 @@ from django.test import Client
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from .models import BalanceSheetAccount, BottleCustomerPO, BottleDelivery, BottleProduct, ClientMaterial, ClientMaterialPO, ClientMaterialReceipt, Category, Customer, CustomerLedgerEntry, Expense, ExpenseBudget, Notification, PayrollLine, PayrollRun, Product, Purchase, PurchaseItem, Sale, SaleItem, SecurityAuditEvent, StaffAttendance, StaffMember, StaffTask, StaffTaskEntry, StockMovement, Supplier, SupplierLedgerEntry, SystemSetting
+from .models import BalanceSheetAccount, BottleCustomerPO, BottleDelivery, BottleProduct, ClientMaterial, ClientMaterialPO, ClientMaterialReceipt, Category, Customer, CustomerLedgerEntry, Expense, ExpenseBudget, ExpenseCategory, ExpenseTypeOption, Notification, PayrollLine, PayrollRun, Product, Purchase, PurchaseItem, Sale, SaleItem, SecurityAuditEvent, StaffAttendance, StaffMember, StaffTask, StaffTaskEntry, StockMovement, Supplier, SupplierLedgerEntry, SystemSetting
 
 
 class AdminAPITestCase(APITestCase):
@@ -2415,6 +2415,7 @@ class ExpenseDashboardTests(AdminAPITestCase):
         self.assertEqual(budget.status_code, 201)
 
         summary = self.client.get('/api/expenses/summary/').data
+        self.assertTrue(summary['can_edit_expenses'])
         self.assertEqual(summary['total_expenses'], '318.00')
         self.assertEqual(summary['pending_approval'], '108.00')
         self.assertEqual(summary['pending_count'], 1)
@@ -2424,6 +2425,54 @@ class ExpenseDashboardTests(AdminAPITestCase):
         logistics_budget = next(item for item in summary['budgets'] if item['category'] == 'Logistics & Freight')
         self.assertEqual(logistics_budget['percent_used'], 120.0)
         self.assertEqual(len(summary['expenses']), 2)
+
+    def test_expense_can_be_edited_and_recalculates_total(self):
+        created = self.create_expense()
+
+        response = self.client.patch(f"/api/expenses/{created.data['id']}/", {
+            'merchant': 'Updated Freight Company',
+            'amount_before_tax': '125.00',
+            'tax_amount': '10.00',
+            'receipt_verified': False,
+        }, format='json')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['merchant'], 'Updated Freight Company')
+        self.assertEqual(response.data['amount_before_tax'], '125.00')
+        self.assertEqual(response.data['tax_amount'], '10.00')
+        self.assertEqual(response.data['total_amount'], '135.00')
+        self.assertFalse(response.data['receipt_verified'])
+
+    def test_expense_can_be_edited_after_its_options_are_removed(self):
+        created = self.create_expense()
+        ExpenseCategory.objects.filter(name='Logistics & Freight').delete()
+        ExpenseTypeOption.objects.filter(value='freight').delete()
+
+        response = self.client.patch(f"/api/expenses/{created.data['id']}/", {
+            'description': 'Updated delivery service',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['description'], 'Updated delivery service')
+        self.assertEqual(response.data['category'], 'Logistics & Freight')
+        self.assertEqual(response.data['expense_type'], 'freight')
+
+    def test_expense_summary_hides_edit_actions_without_change_permission(self):
+        user = get_user_model().objects.create_user(
+            username='expense-viewer',
+            password='test-password',
+            is_staff=True,
+        )
+        user.user_permissions.add(
+            Permission.objects.get(content_type__app_label='inventory', codename='view_expense'),
+            Permission.objects.get(content_type__app_label='inventory', codename='view_expensebudget'),
+        )
+        self.client.force_authenticate(user=user)
+
+        summary = self.client.get('/api/expenses/summary/')
+
+        self.assertEqual(summary.status_code, 200)
+        self.assertFalse(summary.data['can_edit_expenses'])
 
     def test_expense_summary_query_count_does_not_scale_with_budgets(self):
         self.create_expense()

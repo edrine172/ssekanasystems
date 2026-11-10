@@ -15,9 +15,9 @@ class ExpenseSerializer(serializers.ModelSerializer):
         category = attrs.get('category', self.instance.category if self.instance else None)
         expense_type = attrs.get('expense_type', self.instance.expense_type if self.instance else Expense.ExpenseType.OPERATIONAL)
         errors = {}
-        if category and not ExpenseCategory.objects.filter(name=category).exists():
+        if category and category != getattr(self.instance, 'category', None) and not ExpenseCategory.objects.filter(name=category).exists():
             errors['category'] = 'Choose an existing expense category.'
-        if expense_type and not ExpenseTypeOption.objects.filter(value=expense_type).exists():
+        if expense_type and expense_type != getattr(self.instance, 'expense_type', None) and not ExpenseTypeOption.objects.filter(value=expense_type).exists():
             errors['expense_type'] = 'Choose an existing expense type.'
         if errors:
             raise serializers.ValidationError(errors)

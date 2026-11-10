@@ -613,6 +613,7 @@ export interface ExpenseSummary {
   daily_series: Array<{ label: string; total: number; types: Record<string, number> }>;
   expense_types: ExpenseTypeOption[];
   expenses: Expense[];
+  can_edit_expenses: boolean;
 }
 
 export interface ExpenseCategoryOption {
@@ -1226,7 +1227,7 @@ export const api = {
     request<BalanceSheetAccount>(`/balance-sheet-accounts/${category}/`, { method: 'PATCH', body: JSON.stringify(account) }),
   createExpense: (expense: ExpenseInput) =>
     request<Expense>('/expenses/', { method: 'POST', body: JSON.stringify(expense) }),
-  updateExpense: (id: number, expense: Partial<Pick<Expense, 'status' | 'receipt_received' | 'receipt_verified'>>) =>
+  updateExpense: (id: number, expense: Partial<ExpenseInput>) =>
     request<Expense>(`/expenses/${id}/`, { method: 'PATCH', body: JSON.stringify(expense) }),
   bulkCreateExpenses: (expenses: ExpenseInput[]) =>
     request<Expense[]>('/expenses/bulk-upload/', { method: 'POST', body: JSON.stringify({ expenses }) }),

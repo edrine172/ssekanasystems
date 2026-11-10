@@ -10,19 +10,35 @@ const localDate = () => {
   const today = new Date();
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 };
-function ExpenseForm({ categories, types, onClose, onSaved }: {
+function ExpenseForm({ categories, types, expense, onClose, onSaved }: {
   categories: ExpenseCategoryOption[];
   types: ExpenseTypeOption[];
+  expense?: Expense;
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const [draft, setDraft] = useState({
+  const [draft, setDraft] = useState<ExpenseInput>(() => expense ? ({
+    merchant: expense.merchant,
+    description: expense.description,
+    category: expense.category,
+    cost_center: expense.cost_center,
+    expense_type: expense.expense_type,
+    amount_before_tax: expense.amount_before_tax,
+    tax_amount: expense.tax_amount,
+    payment_method: expense.payment_method,
+    status: expense.status,
+    reference: expense.reference,
+    expense_date: expense.expense_date,
+    receipt_received: expense.receipt_received,
+    receipt_verified: expense.receipt_verified,
+    entered_by: expense.entered_by,
+  }) : ({
     merchant: '', description: '', category: categories[0]?.name ?? '', cost_center: '',
     expense_type: types[0]?.value ?? '', amount_before_tax: '', tax_amount: '0.00',
-    payment_method: 'bank' as ExpenseInput['payment_method'], status: 'pending' as ExpenseInput['status'],
+    payment_method: 'bank', status: 'pending',
     reference: '', expense_date: localDate(), receipt_received: false,
     receipt_verified: false, entered_by: 'Elena Vance',
-  });
+  }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const total = Number(draft.amount_before_tax || 0) + Number(draft.tax_amount || 0);
@@ -33,7 +49,9 @@ function ExpenseForm({ categories, types, onClose, onSaved }: {
     setSaving(true);
     setError('');
     try {
-      await api.createExpense({ ...draft, amount_before_tax: draft.amount_before_tax, tax_amount: draft.tax_amount, receipt_verified: draft.receipt_received && draft.receipt_verified });
+      const input = { ...draft, receipt_verified: draft.receipt_received && draft.receipt_verified };
+      if (expense) await api.updateExpense(expense.id, input);
+      else await api.createExpense(input);
       await onSaved();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not record this expense.');
@@ -43,16 +61,16 @@ function ExpenseForm({ categories, types, onClose, onSaved }: {
   }
 
   return <div className="catalog-overlay" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><form className="catalog-modal expense-form-modal" onSubmit={submit}>
-    <div className="catalog-modal-heading"><div><span className="catalog-eyebrow">FINANCE &amp; ACCOUNTING</span><h2>Record expense</h2><p>Capture vendor spend, tax, receipt, and approval details.</p></div><button className="catalog-icon-button" type="button" onClick={onClose} aria-label="Close"><X size={18}/></button></div>
+    <div className="catalog-modal-heading"><div><span className="catalog-eyebrow">FINANCE &amp; ACCOUNTING</span><h2>{expense ? `Edit ${expense.expense_number}` : 'Record expense'}</h2><p>{expense ? 'Update the expense details in the ledger.' : 'Capture vendor spend, tax, receipt, and approval details.'}</p></div><button className="catalog-icon-button" type="button" onClick={onClose} aria-label="Close"><X size={18}/></button></div>
     <div className="catalog-form-row"><label className="catalog-field">Merchant<input required maxLength={160} value={draft.merchant} onChange={(event) => update('merchant', event.target.value)} placeholder="Vendor or merchant name"/></label><label className="catalog-field">Expense date<input required type="date" value={draft.expense_date} onChange={(event) => update('expense_date', event.target.value)}/></label></div>
     <label className="catalog-field">Description<input required maxLength={240} value={draft.description} onChange={(event) => update('description', event.target.value)} placeholder="What was purchased or paid for?"/></label>
-    <div className="catalog-form-row"><label className="catalog-field">Category<select required value={draft.category} onChange={(event) => update('category', event.target.value)}>{categories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}</select></label><label className="catalog-field">Cost center<input maxLength={80} value={draft.cost_center} onChange={(event) => update('cost_center', event.target.value)} placeholder="Warehouse & Logistics"/></label></div>
-    <div className="catalog-form-row"><label className="catalog-field">Expense type<select required value={draft.expense_type} onChange={(event) => update('expense_type', event.target.value)}>{types.map((type) => <option key={type.id} value={type.value}>{type.label}</option>)}</select></label><label className="catalog-field">Payment method<select value={draft.payment_method} onChange={(event) => update('payment_method', event.target.value as ExpenseInput['payment_method'])}><option value="bank">ACH / wire</option><option value="card">Card</option><option value="cash">Cash</option><option value="check">Check</option><option value="petty_cash">Petty cash</option></select></label></div>
+    <div className="catalog-form-row"><label className="catalog-field">Category<select required value={draft.category} onChange={(event) => update('category', event.target.value)}>{draft.category && !categories.some((category) => category.name === draft.category) && <option value={draft.category}>{draft.category}</option>}{categories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}</select></label><label className="catalog-field">Cost center<input maxLength={80} value={draft.cost_center} onChange={(event) => update('cost_center', event.target.value)} placeholder="Warehouse & Logistics"/></label></div>
+    <div className="catalog-form-row"><label className="catalog-field">Expense type<select required value={draft.expense_type} onChange={(event) => update('expense_type', event.target.value)}>{draft.expense_type && !types.some((type) => type.value === draft.expense_type) && <option value={draft.expense_type}>{draft.expense_type}</option>}{types.map((type) => <option key={type.id} value={type.value}>{type.label}</option>)}</select></label><label className="catalog-field">Payment method<select value={draft.payment_method} onChange={(event) => update('payment_method', event.target.value as ExpenseInput['payment_method'])}><option value="bank">ACH / wire</option><option value="card">Card</option><option value="cash">Cash</option><option value="check">Check</option><option value="petty_cash">Petty cash</option></select></label></div>
     <div className="catalog-form-row"><label className="catalog-field">Amount before tax<input type="number" min="0.01" step="0.01" required value={draft.amount_before_tax} onChange={(event) => update('amount_before_tax', event.target.value)}/></label><label className="catalog-field">Tax amount<input type="number" min="0" step="0.01" value={draft.tax_amount} onChange={(event) => update('tax_amount', event.target.value)}/></label></div>
-    <div className="catalog-form-row"><label className="catalog-field">Voucher / invoice reference<input maxLength={80} value={draft.reference} onChange={(event) => update('reference', event.target.value)}/></label><label className="catalog-field">Approval status<select value={draft.status} onChange={(event) => update('status', event.target.value as ExpenseInput['status'])}><option value="pending">Pending approval</option><option value="approved">Approved</option><option value="paid">Paid</option></select></label></div>
+    <div className="catalog-form-row"><label className="catalog-field">Voucher / invoice reference<input maxLength={80} value={draft.reference} onChange={(event) => update('reference', event.target.value)}/></label><label className="catalog-field">Approval status<select value={draft.status} onChange={(event) => update('status', event.target.value as ExpenseInput['status'])}><option value="pending">Pending approval</option><option value="approved">Approved</option><option value="paid">Paid</option>{expense?.status === 'rejected' && <option value="rejected">Rejected</option>}</select></label></div>
     <div className="expense-receipt-options"><label><input type="checkbox" checked={draft.receipt_received} onChange={(event) => { update('receipt_received', event.target.checked); if (!event.target.checked) update('receipt_verified', false); }}/>Receipt received</label><label><input type="checkbox" disabled={!draft.receipt_received} checked={draft.receipt_verified} onChange={(event) => update('receipt_verified', event.target.checked)}/>Receipt verified</label><strong>Total {currency(total)}</strong></div>
     {error && <p className="catalog-form-error">{error}</p>}
-    <div className="catalog-modal-actions"><button type="button" className="catalog-button catalog-button-light" onClick={onClose}>Cancel</button><button className="catalog-button catalog-button-primary" disabled={saving}>{saving ? 'Saving…' : 'Record expense'}</button></div>
+    <div className="catalog-modal-actions"><button type="button" className="catalog-button catalog-button-light" onClick={onClose}>Cancel</button><button className="catalog-button catalog-button-primary" disabled={saving}>{saving ? 'Saving…' : expense ? 'Save changes' : 'Record expense'}</button></div>
   </form></div>;
 }
 
@@ -273,6 +291,7 @@ export default function ExpensesDashboard({ onOpenReports }: { onOpenReports: ()
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [budgetTarget, setBudgetTarget] = useState<ExpenseBudget | null | undefined>(undefined);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [notice, setNotice] = useState('');
@@ -416,9 +435,10 @@ export default function ExpensesDashboard({ onOpenReports }: { onOpenReports: ()
       {error && <div className="expense-inline-error"><CircleAlert size={13}/>{error}</div>}
       {notice && <div className="catalog-toast"><Check size={15}/>{notice}<button onClick={() => setNotice('')} aria-label="Dismiss"><X size={14}/></button></div>}
       <section className="catalog-filter-panel expense-filters"><div className="catalog-filter-row"><label className="catalog-search product-search"><Search size={14}/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search voucher, merchant, description"/></label><label className="catalog-select"><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="all">All categories</option>{expenseOptions.categories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}</select><ChevronDown size={12}/></label><label className="catalog-select"><select value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)}><option value="all">All payment methods</option><option value="card">Card</option><option value="bank">ACH / wire</option><option value="cash">Cash</option><option value="check">Check</option><option value="petty_cash">Petty cash</option></select><ChevronDown size={12}/></label><label className="catalog-select"><select value={receiptFilter} onChange={(event) => setReceiptFilter(event.target.value as ReceiptFilter)}><option value="all">All receipts</option><option value="verified">Verified</option><option value="missing">Missing</option></select><ChevronDown size={12}/></label><span className="expense-date-range">{summary.start_date} – {summary.end_date}</span></div></section>
-      <section className="catalog-table-panel expense-table-panel"><div className="catalog-table-scroll"><table className="catalog-table expense-table"><thead><tr><th>EXPENSE / VOUCHER #</th><th>MERCHANT &amp; DESCRIPTION</th><th>COST CENTER</th><th>AMOUNT &amp; TAX</th><th>PAYMENT</th><th>STATUS</th><th>RECEIPT</th><th>ACTION</th></tr></thead><tbody>{expenses.map((expense) => <tr key={expense.id}><td><strong className="expense-number">{expense.expense_number}</strong><small>{new Date(`${expense.expense_date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</small></td><td><strong className="expense-merchant">{expense.merchant}</strong><small>{expense.description}</small></td><td><span className="expense-cost-center">{expense.cost_center || expense.category}</span></td><td><strong>{currency(expense.total_amount)}</strong><small>{expense.tax_amount === '0.00' ? 'Tax exempt' : `Incl. ${currency(expense.tax_amount)} tax`}</small></td><td>{expense.payment_method_display}</td><td><span className={`expense-status ${expense.status}`}>{expense.status_display}</span></td><td><span className={`expense-receipt-status ${expense.receipt_verified ? 'verified' : expense.receipt_received ? 'received' : 'missing'}`}>{expense.receipt_verified ? 'Verified' : expense.receipt_received ? 'Received' : 'Missing'}</span></td><td><select className="expense-status-select" aria-label={`Update ${expense.expense_number} status`} disabled={busyId === expense.id} value={expense.status} onChange={(event) => void updateStatus(expense, event.target.value as Expense['status'])}><option value="pending">Pending</option><option value="approved">Approved</option><option value="paid">Paid</option><option value="rejected">Rejected</option></select></td></tr>)}{!expenses.length && <tr><td colSpan={8} className="catalog-state">No expenses match these filters.</td></tr>}</tbody></table></div><footer className="catalog-table-footer"><span>Showing <b>{expenses.length}</b> of <b>{summary.expense_count}</b> records</span><button className="catalog-clear" onClick={() => { setSearch(''); setCategoryFilter('all'); setPaymentFilter('all'); setReceiptFilter('all'); }}>Clear filters</button></footer></section>
+      <section className="catalog-table-panel expense-table-panel"><div className="catalog-table-scroll"><table className="catalog-table expense-table"><thead><tr><th>EXPENSE / VOUCHER #</th><th>MERCHANT &amp; DESCRIPTION</th><th>COST CENTER</th><th>AMOUNT &amp; TAX</th><th>PAYMENT</th><th>STATUS</th><th>RECEIPT</th><th>ACTION</th></tr></thead><tbody>{expenses.map((expense) => <tr key={expense.id}><td><strong className="expense-number">{expense.expense_number}</strong><small>{new Date(`${expense.expense_date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</small></td><td><strong className="expense-merchant">{expense.merchant}</strong><small>{expense.description}</small></td><td><span className="expense-cost-center">{expense.cost_center || expense.category}</span></td><td><strong>{currency(expense.total_amount)}</strong><small>{expense.tax_amount === '0.00' ? 'Tax exempt' : `Incl. ${currency(expense.tax_amount)} tax`}</small></td><td>{expense.payment_method_display}</td><td><span className={`expense-status ${expense.status}`}>{expense.status_display}</span></td><td><span className={`expense-receipt-status ${expense.receipt_verified ? 'verified' : expense.receipt_received ? 'received' : 'missing'}`}>{expense.receipt_verified ? 'Verified' : expense.receipt_received ? 'Received' : 'Missing'}</span></td><td>{summary.can_edit_expenses && <div className="expense-actions" style={{ display: 'flex', alignItems: 'center', gap: 4 }}><button type="button" className="catalog-icon-button" aria-label={`Edit ${expense.expense_number}`} onClick={() => setEditingExpense(expense)}><Pencil size={12}/></button><select className="expense-status-select" aria-label={`Update ${expense.expense_number} status`} disabled={busyId === expense.id} value={expense.status} onChange={(event) => void updateStatus(expense, event.target.value as Expense['status'])}><option value="pending">Pending</option><option value="approved">Approved</option><option value="paid">Paid</option><option value="rejected">Rejected</option></select></div>}</td></tr>)}{!expenses.length && <tr><td colSpan={8} className="catalog-state">No expenses match these filters.</td></tr>}</tbody></table></div><footer className="catalog-table-footer"><span>Showing <b>{expenses.length}</b> of <b>{summary.expense_count}</b> records</span><button className="catalog-clear" onClick={() => { setSearch(''); setCategoryFilter('all'); setPaymentFilter('all'); setReceiptFilter('all'); }}>Clear filters</button></footer></section>
     </>}
     {showExpenseForm && <ExpenseForm categories={expenseOptions.categories} types={expenseOptions.types} onClose={() => setShowExpenseForm(false)} onSaved={async () => { setShowExpenseForm(false); await loadSummary(); setNotice('Expense recorded in the ledger.'); }}/>}
+    {editingExpense && <ExpenseForm key={editingExpense.id} categories={expenseOptions.categories} types={expenseOptions.types} expense={editingExpense} onClose={() => setEditingExpense(null)} onSaved={async () => { setEditingExpense(null); await loadSummary(); setNotice(`${editingExpense.expense_number} updated in the ledger.`); }}/>}
     {showExpenseOptions && <ExpenseOptionsForm categories={expenseOptions.categories} types={expenseOptions.types} onClose={() => setShowExpenseOptions(false)} onAdd={addExpenseOption} onDeleteCategory={deleteExpenseCategory} onDeleteType={deleteExpenseType}/>}
     {budgetTarget !== undefined && <BudgetForm initial={budgetTarget} onClose={() => setBudgetTarget(undefined)} onSaved={saveBudget}/>}
   </>;
