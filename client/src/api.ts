@@ -147,7 +147,7 @@ export interface SecurityAuditEvent {
   created_at: string;
 }
 
-export type NotificationDashboard = 'overview' | 'products' | 'inventory' | 'purchases' | 'po-client' | 'pos' | 'sales' | 'reports' | 'customers' | 'suppliers' | 'expenses' | 'users' | 'settings' | 'staff';
+export type NotificationDashboard = 'overview' | 'products' | 'inventory' | 'purchases' | 'po-client' | 'pos' | 'sales' | 'reports' | 'customers' | 'suppliers' | 'expenses' | 'account' | 'users' | 'settings' | 'staff';
 export type NotificationCategory = 'stock' | 'procurement' | 'billing' | 'operations';
 
 export interface AppNotification {
@@ -300,6 +300,8 @@ export interface SupplierLedgerEntry {
   entry_type: 'charge' | 'payment' | 'credit';
   entry_type_display: string;
   amount: string;
+  payment_method: 'cash' | 'card' | 'mobile' | 'transfer' | 'check' | '';
+  payment_method_display: string;
   reference: string;
   note: string;
   purchase_reference: string;
@@ -345,6 +347,8 @@ export interface CustomerLedgerEntry {
   entry_type: 'charge' | 'payment' | 'credit';
   entry_type_display: string;
   amount: string;
+  payment_method: 'cash' | 'card' | 'mobile' | 'transfer' | 'check' | '';
+  payment_method_display: string;
   reference: string;
   note: string;
   sale_reference: string;
@@ -399,6 +403,7 @@ export interface Purchase {
   paid_amount: string;
   remaining_balance: string;
   payment_status: 'not_due' | 'unpaid' | 'partial' | 'paid';
+  payments: SupplierLedgerEntry[];
   notes: string;
   expected_delivery: string | null;
   ordered_at: string;
@@ -529,6 +534,7 @@ export interface Sale {
   remaining_balance: string;
   payment_status: 'paid' | 'partial' | 'unpaid';
   items: SaleLine[];
+  payments: CustomerLedgerEntry[];
   created_at: string;
 }
 
@@ -1201,6 +1207,7 @@ export const api = {
     request<StockMovement>('/inventory/adjustments/', { method: 'POST', body: JSON.stringify(adjustment) }),
   purchaseSummary: () => request<PurchaseSummary>('/purchases/summary/'),
   purchases: () => request<Purchase[]>('/purchases/'),
+  sales: () => request<Sale[]>('/sales/'),
   createPurchase: (purchase: Pick<Purchase, 'supplier' | 'notes'> & { reference?: string; expected_delivery?: string | null; items: Array<Pick<PurchaseItem, 'product' | 'quantity' | 'unit_cost'>> }) =>
     request<Purchase>('/purchases/', { method: 'POST', body: JSON.stringify(purchase) }),
   receivePurchase: (id: number) =>
@@ -1225,7 +1232,7 @@ export const api = {
     request<void>(`/po-client/material-orders/${id}/`, { method: 'DELETE' }),
   receiveClientMaterialOrder: (id: number, receipt: { quantity: string; notes?: string }) =>
     request<ClientMaterialPO>(`/po-client/material-orders/${id}/receive/`, { method: 'POST', body: JSON.stringify(receipt) }),
-  payPurchase: (id: number, payment: { amount: string; reference?: string; note?: string }) =>
+  payPurchase: (id: number, payment: { amount: string; payment_method: Exclude<SupplierLedgerEntry['payment_method'], ''>; reference?: string; note?: string }) =>
     request<{ purchase: Purchase; ledger_entry: SupplierLedgerEntry }>(`/purchases/${id}/payments/`, {
       method: 'POST',
       body: JSON.stringify(payment),
@@ -1301,13 +1308,13 @@ export const api = {
   updateCustomer: (id: number, customer: Partial<Omit<Customer, 'id' | 'customer_code' | 'tax_exempt' | 'outstanding_balance' | 'lifetime_revenue' | 'completed_orders' | 'created_at'>>) =>
     request<Customer>(`/customers/${id}/`, { method: 'PATCH', body: JSON.stringify(customer) }),
   customerDashboard: (id: number) => request<CustomerDashboardData>(`/customers/${id}/dashboard/`),
-  receiveCustomerPayment: (id: number, payment: { amount: string; reference?: string; note?: string; sale?: number }) =>
+  receiveCustomerPayment: (id: number, payment: { amount: string; payment_method: Exclude<CustomerLedgerEntry['payment_method'], ''>; reference?: string; note?: string; sale?: number }) =>
     request<{ customer: Customer; ledger_entry: CustomerLedgerEntry }>(`/customers/${id}/payments/`, { method: 'POST', body: JSON.stringify(payment) }),
   supplierDashboard: (id: number) => request<SupplierDashboardData>(`/suppliers/${id}/dashboard/`),
   createSupplier: (supplier: Omit<Supplier, 'id' | 'supplier_code' | 'outstanding_balance' | 'lifetime_spend' | 'completed_orders' | 'on_time_delivery_rate' | 'created_at'>) =>
     request<Supplier>('/suppliers/', { method: 'POST', body: JSON.stringify(supplier) }),
   updateSupplier: (id: number, supplier: Partial<Omit<Supplier, 'id' | 'supplier_code' | 'outstanding_balance' | 'lifetime_spend' | 'completed_orders' | 'on_time_delivery_rate' | 'created_at'>>) =>
     request<Supplier>(`/suppliers/${id}/`, { method: 'PATCH', body: JSON.stringify(supplier) }),
-  paySupplier: (id: number, payment: { amount: string; reference?: string; note?: string }) =>
+  paySupplier: (id: number, payment: { amount: string; payment_method: Exclude<SupplierLedgerEntry['payment_method'], ''>; reference?: string; note?: string }) =>
     request<{ supplier: Supplier; ledger_entry: SupplierLedgerEntry }>(`/suppliers/${id}/payments/`, { method: 'POST', body: JSON.stringify(payment) }),
 };

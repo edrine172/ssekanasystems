@@ -28,7 +28,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def dashboard(self, request, pk=None):
         supplier = self.get_object()
-        purchases = supplier.purchases.select_related('supplier').prefetch_related('items__product').all()
+        purchases = supplier.purchases.select_related('supplier').prefetch_related('items__product', 'ledger_entries').all()
         open_purchases = [purchase for purchase in purchases if purchase.status == Purchase.Status.ORDERED]
         received_purchases = [purchase for purchase in purchases if purchase.status == Purchase.Status.RECEIVED]
         supplier_data = SupplierSerializer(supplier).data
@@ -62,6 +62,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
             supplier=supplier,
             entry_type=SupplierLedgerEntry.EntryType.PAYMENT,
             amount=data['amount'],
+            payment_method=data['payment_method'],
             reference=data.get('reference', '').strip() or f'PAY-{uuid4().hex[:8].upper()}',
             note=data.get('note', '').strip() or 'Supplier payment issued',
         )
@@ -216,6 +217,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 sale=target_sale,
                 entry_type=CustomerLedgerEntry.EntryType.PAYMENT,
                 amount=payment_remaining,
+                payment_method=data['payment_method'],
                 reference=reference,
                 note=note,
             ))
@@ -233,6 +235,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 sale=sale,
                 entry_type=CustomerLedgerEntry.EntryType.PAYMENT,
                 amount=amount_for_sale,
+                payment_method=data['payment_method'],
                 reference=reference,
                 note=note,
             ))
@@ -244,6 +247,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 customer=customer,
                 entry_type=CustomerLedgerEntry.EntryType.PAYMENT,
                 amount=payment_remaining if payment_remaining > 0 else data['amount'],
+                payment_method=data['payment_method'],
                 reference=reference,
                 note=note,
             ))

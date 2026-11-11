@@ -68,10 +68,18 @@ class CustomerLedgerEntry(models.Model):
         PAYMENT = 'payment', 'Payment'
         CREDIT = 'credit', 'Credit'
 
+    class PaymentMethod(models.TextChoices):
+        CASH = 'cash', 'Cash'
+        CARD = 'card', 'Card'
+        MOBILE = 'mobile', 'Mobile'
+        TRANSFER = 'transfer', 'Bank transfer'
+        CHECK = 'check', 'Check'
+
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='ledger_entries')
     sale = models.ForeignKey(Sale, on_delete=models.SET_NULL, related_name='ledger_entries', null=True, blank=True)
     entry_type = models.CharField(max_length=16, choices=EntryType.choices)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
+    payment_method = models.CharField(max_length=16, choices=PaymentMethod.choices, blank=True, default='')
     reference = models.CharField(max_length=80, blank=True)
     note = models.CharField(max_length=240, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, BookOpen, CircleHelp, Package, Search, Settings, ShoppingCart, Users, Warehouse, X } from 'lucide-react';
+import { ArrowRight, BookOpen, CircleHelp, Package, Search, Settings, ShoppingCart, Users, WalletCards, Warehouse, X } from 'lucide-react';
 import type { NotificationDashboard } from './api';
 import './help-center.css';
 
@@ -67,6 +67,7 @@ const shortcuts: { label: string; dashboard: NotificationDashboard; Icon: typeof
   { label: 'Products', dashboard: 'products', Icon: Package },
   { label: 'Inventory', dashboard: 'inventory', Icon: Warehouse },
   { label: 'Point of Sale', dashboard: 'pos', Icon: ShoppingCart },
+  { label: 'Account', dashboard: 'account', Icon: WalletCards },
   { label: 'Users & Roles', dashboard: 'users', Icon: Users },
   { label: 'Settings', dashboard: 'settings', Icon: Settings },
 ];

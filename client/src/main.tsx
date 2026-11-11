@@ -17,6 +17,7 @@ import './reports.css';
 import './customers.css';
 import './suppliers.css';
 import './expenses.css';
+import './account.css';
 import './users.css';
 import './settings.css';
 import './file-actions.css';

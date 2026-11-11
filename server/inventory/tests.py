@@ -1739,7 +1739,7 @@ class PurchaseWorkflowTests(AdminAPITestCase):
 
         partial = self.client.post(
             f'/api/purchases/{purchase_id}/payments/',
-            {'amount': '20.00', 'reference': 'BANK-001'},
+            {'amount': '20.00', 'payment_method': 'mobile', 'reference': 'BANK-001'},
             format='json',
         )
 
@@ -1748,12 +1748,14 @@ class PurchaseWorkflowTests(AdminAPITestCase):
         self.assertEqual(partial.data['purchase']['paid_amount'], '20.00')
         self.assertEqual(partial.data['purchase']['remaining_balance'], '35.50')
         self.assertEqual(partial.data['ledger_entry']['purchase_reference'], created.data['reference'])
+        self.assertEqual(partial.data['ledger_entry']['payment_method'], 'mobile')
+        self.assertEqual(partial.data['purchase']['payments'][0]['payment_method'], 'mobile')
         self.supplier.refresh_from_db()
         self.assertEqual(self.supplier.outstanding_balance, Decimal('35.50'))
 
         full = self.client.post(
             f'/api/purchases/{purchase_id}/payments/',
-            {'amount': '35.50'},
+            {'amount': '35.50', 'payment_method': 'card'},
             format='json',
         )
 
@@ -1761,6 +1763,7 @@ class PurchaseWorkflowTests(AdminAPITestCase):
         self.assertEqual(full.data['purchase']['payment_status'], 'paid')
         self.assertEqual(full.data['purchase']['paid_amount'], '55.50')
         self.assertEqual(full.data['purchase']['remaining_balance'], '0.00')
+        self.assertCountEqual([payment['payment_method'] for payment in full.data['purchase']['payments']], ['mobile', 'card'])
         self.supplier.refresh_from_db()
         self.assertEqual(self.supplier.outstanding_balance, Decimal('0.00'))
 
@@ -2098,10 +2101,12 @@ class CustomerAccountTests(AdminAPITestCase):
 
         payment = self.client.post(f'/api/customers/{self.customer.id}/payments/', {
             'amount': '5.00',
+            'payment_method': 'mobile',
             'reference': 'PAY-001',
             'note': 'ACH payment',
         }, format='json')
         self.assertEqual(payment.status_code, 201)
+        self.assertEqual(payment.data['ledger_entry']['payment_method'], 'mobile')
         self.customer.refresh_from_db()
         self.assertEqual(self.customer.outstanding_balance, Decimal('15.00'))
         self.assertEqual(CustomerLedgerEntry.objects.count(), 2)
@@ -2119,6 +2124,7 @@ class CustomerAccountTests(AdminAPITestCase):
         self.assertEqual(dashboard['sales'][0]['paid_amount'], '5.00')
         self.assertEqual(dashboard['sales'][0]['remaining_balance'], '15.00')
         self.assertEqual(dashboard['sales'][0]['payment_status'], 'partial')
+        self.assertEqual(dashboard['sales'][0]['payments'][0]['payment_method'], 'mobile')
         self.assertEqual(dashboard['sales'][0]['items'][0]['product_name'], self.product.name)
         self.assertEqual(dashboard['sales'][0]['items'][0]['line_total'], '20.00')
         self.assertEqual(len(dashboard['ledger_entries']), 2)

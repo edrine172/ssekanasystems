@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownLeft, ArrowUpRight, Building2, Check, FileText, Mail, MapPin, Package, Phone, Plus, RefreshCw, Search, ShieldCheck, Truck, Users, Wallet, X } from 'lucide-react';
-import { api, formatCurrency as currency, type Purchase, type Supplier, type SupplierDashboardData } from './api';
+import { api, formatCurrency as currency, type Purchase, type Supplier, type SupplierDashboardData, type SupplierLedgerEntry } from './api';
 import { useDataRevision } from './dataSync';
 import './supplier-payments.css';
 
@@ -14,6 +14,7 @@ function SupplierPurchasePaymentForm({ purchase, onClose, onSaved }: {
   onSaved: () => Promise<void>;
 }) {
   const [amount, setAmount] = useState(purchase.remaining_balance);
+  const [paymentMethod, setPaymentMethod] = useState<SupplierLedgerEntry['payment_method']>('');
   const [reference, setReference] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -26,10 +27,14 @@ function SupplierPurchasePaymentForm({ purchase, onClose, onSaved }: {
       setError(`Enter an amount greater than zero and no more than ${currency(purchase.remaining_balance)}.`);
       return;
     }
+    if (!paymentMethod) {
+      setError('Select how the supplier payment was made.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
-      await api.payPurchase(purchase.id, { amount: paymentAmount.toFixed(2), reference: reference.trim() });
+      await api.payPurchase(purchase.id, { amount: paymentAmount.toFixed(2), payment_method: paymentMethod, reference: reference.trim() });
       await onSaved();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not record this supplier payment.');
@@ -51,6 +56,7 @@ function SupplierPurchasePaymentForm({ purchase, onClose, onSaved }: {
         <button type="button" className="catalog-button catalog-button-light" onClick={() => setAmount(purchase.remaining_balance)}>Pay in full</button>
       </div>
       <label className="catalog-field">Amount received<input type="number" min="0.01" max={purchase.remaining_balance} step="0.01" required value={amount} onChange={(event) => setAmount(event.target.value)}/></label>
+      <label className="catalog-field">Payment method<select required value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as typeof paymentMethod)}><option value="" disabled>Select a payment method</option><option value="cash">Cash</option><option value="mobile">Mobile money</option><option value="card">Card</option><option value="transfer">Bank transfer</option><option value="check">Check</option></select></label>
       <label className="catalog-field">Payment reference <span className="purchase-payment-optional">(optional)</span><input maxLength={80} value={reference} onChange={(event) => setReference(event.target.value)} placeholder="Receipt, transfer, or transaction number"/></label>
       <p className="purchase-payment-confirmation">Confirming records the payment against this order and updates the supplier balance.</p>
       {error && <p className="catalog-form-error">{error}</p>}

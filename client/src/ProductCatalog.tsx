@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useS
 import {
   AlertTriangle, Barcode, Boxes, Check, ChevronDown, ChevronLeft, ClipboardList,
   ChevronRight, CircleHelp, LayoutDashboard, ListFilter,
-  BriefcaseBusiness, LogOut, MoreHorizontal, Package, Plus, Power, Printer, Search, Settings, SlidersHorizontal,
+  BriefcaseBusiness, LogOut, MoreHorizontal, Package, Plus, Power, Printer, Search, Settings, SlidersHorizontal, WalletCards,
   Tags, Trash2, Truck, Users, Warehouse, X,
 } from 'lucide-react';
 import { api, formatCurrency as currency, getCurrencyDisplay, setCurrencyDisplay, subscribeCurrencyDisplay, subscribeToAdministratorSessionExpired, type AccessUser, type Category, type Product, type Supplier } from './api';
@@ -24,6 +24,7 @@ const ExpensesDashboard = lazy(() => import('./ExpensesDashboard'));
 const UsersDashboard = lazy(() => import('./UsersDashboard'));
 const SettingsDashboard = lazy(() => import('./SettingsDashboard'));
 const StaffDashboard = lazy(() => import('./StaffDashboard'));
+const AccountDashboard = lazy(() => import('./AccountDashboard'));
 const NotificationCenter = lazy(() => import('./NotificationCenter'));
 const HelpCenter = lazy(() => import('./HelpCenter'));
 const AccountEntry = lazy(() => import('./AccountEntry'));
@@ -35,7 +36,7 @@ type AvailabilityFilter = 'All products' | 'Active' | 'Inactive';
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
 const stockStatus = (product: Product): Exclude<StatusFilter, 'All statuses'> => product.quantity === 0 ? 'Out of stock' : product.quantity <= product.reorder_level ? 'Low stock' : 'In stock';
 const adminViews = new Set<NotificationDashboard>(['users', 'settings', 'staff']);
-const dashboardViews = new Set<NotificationDashboard>(['overview', 'products', 'inventory', 'purchases', 'po-client', 'pos', 'sales', 'reports', 'customers', 'suppliers', 'expenses', 'users', 'settings', 'staff']);
+const dashboardViews = new Set<NotificationDashboard>(['overview', 'products', 'inventory', 'purchases', 'po-client', 'pos', 'sales', 'reports', 'customers', 'suppliers', 'expenses', 'account', 'users', 'settings', 'staff']);
 const isDashboardView = (view: NotificationDashboard | 'home' | 'auth'): view is NotificationDashboard => view !== 'home' && view !== 'auth' && dashboardViews.has(view);
 
 function dashboardLabel(view: NotificationDashboard | 'home' | 'auth') {
@@ -43,6 +44,7 @@ function dashboardLabel(view: NotificationDashboard | 'home' | 'auth') {
   if (view === 'users') return 'Users & Roles';
   if (view === 'overview') return 'Dashboard';
   if (view === 'po-client') return 'Purchasing Order (PO) Client';
+  if (view === 'account') return 'Account';
   return view.charAt(0).toUpperCase() + view.slice(1);
 }
 
@@ -496,6 +498,7 @@ export default function ProductCatalog() {
         <button className={`catalog-nav-item ${activeView === 'customers' ? 'active' : ''}`} onClick={() => setActiveView('customers')}><Users size={15}/>Customers</button>
         <button className={`catalog-nav-item ${activeView === 'suppliers' ? 'active' : ''}`} onClick={() => setActiveView('suppliers')}><Truck size={15}/>Suppliers</button>
         <button className={`catalog-nav-item ${activeView === 'expenses' ? 'active' : ''}`} onClick={() => setActiveView('expenses')}><ListFilter size={15}/>Expenses</button>
+        <button className={`catalog-nav-item ${activeView === 'account' ? 'active' : ''}`} onClick={() => setActiveView('account')}><WalletCards size={15}/>Account</button>
         <button className={`catalog-nav-item ${activeView === 'reports' ? 'active' : ''}`} onClick={() => setActiveView('reports')}><Boxes size={15}/>Reports</button>
         <div className="catalog-nav-divider"/>
         <button className={`catalog-nav-item ${activeView === 'staff' ? 'active' : ''}`} onClick={() => setActiveView('staff')}><BriefcaseBusiness size={15}/>Payroll &amp; Staff</button>
@@ -523,6 +526,7 @@ export default function ProductCatalog() {
       {mountedDashboards.has('customers') && <DashboardPanel active={activeView === 'customers'}><Suspense fallback={<section className="overview-state" role="status">Loading customers…</section>}><CustomersDashboard onStartSale={(customerId) => { setPosCustomerId(customerId); setActiveView('pos'); }} onOpenSales={() => setActiveView('sales')}/></Suspense></DashboardPanel>}
       {mountedDashboards.has('suppliers') && <DashboardPanel active={activeView === 'suppliers'}><Suspense fallback={<section className="overview-state" role="status">Loading suppliers…</section>}><SuppliersDashboard onOpenPurchases={(supplierId) => { setPurchaseSupplierId(supplierId); setActiveView('purchases'); }} onOpenInventory={() => setActiveView('inventory')}/></Suspense></DashboardPanel>}
       {mountedDashboards.has('expenses') && <DashboardPanel active={activeView === 'expenses'}><Suspense fallback={<section className="overview-state" role="status">Loading expenses…</section>}><ExpensesDashboard onOpenReports={() => setActiveView('reports')}/></Suspense></DashboardPanel>}
+      {mountedDashboards.has('account') && <DashboardPanel active={activeView === 'account'}><Suspense fallback={<section className="overview-state" role="status">Loading account activity…</section>}><AccountDashboard/></Suspense></DashboardPanel>}
       {mountedDashboards.has('users') && <DashboardPanel active={activeView === 'users'}><Suspense fallback={<section className="overview-state" role="status">Loading users…</section>}><UsersDashboard onSignOut={signOut}/></Suspense></DashboardPanel>}
       {(mountedDashboards.has('reports') || mountedDashboards.has('sales')) && <DashboardPanel active={activeView === 'reports' || activeView === 'sales'}><Suspense fallback={<section className="overview-state" role="status">Loading reports…</section>}><ReportsDashboard onOpenInventory={() => setActiveView('inventory')} onOpenPurchases={() => setActiveView('purchases')} onOpenPOS={() => setActiveView('pos')} onOpenExpenses={() => setActiveView('expenses')}/></Suspense></DashboardPanel>}
       {mountedDashboards.has('products') && <DashboardPanel active={activeView === 'products'}><>

@@ -17,6 +17,7 @@ class SaleItemSerializer(serializers.ModelSerializer):
 
 class SaleSerializer(serializers.ModelSerializer):
     items = SaleItemSerializer(many=True, read_only=True)
+    payments = serializers.SerializerMethodField()
     payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
     customer = serializers.PrimaryKeyRelatedField(read_only=True)
     paid_amount = serializers.SerializerMethodField()
@@ -28,6 +29,13 @@ class SaleSerializer(serializers.ModelSerializer):
             entry.entry_type == CustomerLedgerEntry.EntryType.CHARGE
             for entry in sale.ledger_entries.all()
         )
+
+    def get_payments(self, sale):
+        entries = [
+            entry for entry in sale.ledger_entries.all()
+            if entry.entry_type == CustomerLedgerEntry.EntryType.PAYMENT
+        ]
+        return CustomerLedgerEntrySerializer(entries, many=True).data
 
     def get_paid_amount(self, sale):
         if not self.has_account_balance(sale):
@@ -56,7 +64,7 @@ class SaleSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'receipt_number', 'customer', 'customer_name', 'payment_method', 'payment_method_display',
             'subtotal', 'discount_percent', 'discount_amount', 'tax_rate', 'tax_amount', 'total',
-            'cash_tendered', 'change_due', 'paid_amount', 'remaining_balance', 'payment_status', 'items', 'created_at',
+            'cash_tendered', 'change_due', 'paid_amount', 'remaining_balance', 'payment_status', 'items', 'payments', 'created_at',
         ]
         read_only_fields = fields
 
@@ -99,14 +107,16 @@ class SaleCheckoutSerializer(serializers.Serializer):
 class CustomerLedgerEntrySerializer(serializers.ModelSerializer):
     sale_reference = serializers.CharField(source='sale.receipt_number', read_only=True, default='')
     entry_type_display = serializers.CharField(source='get_entry_type_display', read_only=True)
+    payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
 
     class Meta:
         model = CustomerLedgerEntry
-        fields = ['id', 'entry_type', 'entry_type_display', 'amount', 'reference', 'note', 'sale_reference', 'created_at']
+        fields = ['id', 'entry_type', 'entry_type_display', 'amount', 'payment_method', 'payment_method_display', 'reference', 'note', 'sale_reference', 'created_at']
 
 
 class CustomerPaymentSerializer(serializers.Serializer):
     amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0.01'))
+    payment_method = serializers.ChoiceField(choices=CustomerLedgerEntry.PaymentMethod.choices, required=False, default='')
     reference = serializers.CharField(max_length=80, required=False, allow_blank=True)
     note = serializers.CharField(max_length=240, required=False, allow_blank=True)
     sale = serializers.PrimaryKeyRelatedField(queryset=Sale.objects.all(), required=False)
@@ -115,13 +125,15 @@ class CustomerPaymentSerializer(serializers.Serializer):
 class SupplierLedgerEntrySerializer(serializers.ModelSerializer):
     purchase_reference = serializers.CharField(source='purchase.reference', read_only=True, default='')
     entry_type_display = serializers.CharField(source='get_entry_type_display', read_only=True)
+    payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
 
     class Meta:
         model = SupplierLedgerEntry
-        fields = ['id', 'entry_type', 'entry_type_display', 'amount', 'reference', 'note', 'purchase_reference', 'created_at']
+        fields = ['id', 'entry_type', 'entry_type_display', 'amount', 'payment_method', 'payment_method_display', 'reference', 'note', 'purchase_reference', 'created_at']
 
 
 class SupplierPaymentSerializer(serializers.Serializer):
     amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0.01'))
+    payment_method = serializers.ChoiceField(choices=SupplierLedgerEntry.PaymentMethod.choices, required=False, default='')
     reference = serializers.CharField(max_length=80, required=False, allow_blank=True)
     note = serializers.CharField(max_length=240, required=False, allow_blank=True)

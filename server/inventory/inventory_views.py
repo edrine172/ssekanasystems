@@ -197,6 +197,7 @@ class PurchaseViewSet(viewsets.ModelViewSet):
             purchase=purchase,
             entry_type=SupplierLedgerEntry.EntryType.PAYMENT,
             amount=data['amount'],
+            payment_method=data['payment_method'],
             reference=data.get('reference', '').strip() or f'PAY-{uuid4().hex[:8].upper()}',
             note=data.get('note', '').strip() or f'Supplier payment confirmed for {purchase.reference}',
         )
@@ -579,7 +580,7 @@ def purchase_summary(request):
         'open_value': str(open_value),
         'spent_this_month': str(monthly_spend),
         'recent_purchases': PurchaseSerializer(
-            Purchase.objects.select_related('supplier').prefetch_related('items__product')[:8],
+            Purchase.objects.select_related('supplier').prefetch_related('items__product', 'ledger_entries')[:8],
             many=True,
         ).data,
     })

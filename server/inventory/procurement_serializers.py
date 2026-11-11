@@ -3,6 +3,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import serializers
 from .models import BottleCustomerPO, BottleCustomerPOLine, BottleDelivery, BottleDeliveryLine, BottleProduct, Category, ClientMaterial, ClientMaterialPO, ClientMaterialReceipt, Product, Purchase, PurchaseItem, SupplierLedgerEntry
+from .sales_serializers import SupplierLedgerEntrySerializer
 
 
 class PurchaseItemSerializer(serializers.ModelSerializer):
@@ -28,6 +29,7 @@ class PurchaseSerializer(serializers.ModelSerializer):
     paid_amount = serializers.SerializerMethodField()
     remaining_balance = serializers.SerializerMethodField()
     payment_status = serializers.SerializerMethodField()
+    payments = serializers.SerializerMethodField()
 
     def get_item_count(self, purchase):
         return sum(item.quantity for item in purchase.items.all())
@@ -58,6 +60,13 @@ class PurchaseSerializer(serializers.ModelSerializer):
             'partial' if Decimal(self.get_paid_amount(purchase)) > 0 else 'unpaid'
         )
 
+    def get_payments(self, purchase):
+        entries = [
+            entry for entry in purchase.ledger_entries.all()
+            if entry.entry_type == SupplierLedgerEntry.EntryType.PAYMENT
+        ]
+        return SupplierLedgerEntrySerializer(entries, many=True).data
+
     def validate_items(self, items):
         product_ids = [item['product'].id for item in items]
         if len(product_ids) != len(set(product_ids)):
@@ -76,7 +85,7 @@ class PurchaseSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Purchase
-        fields = ['id', 'reference', 'supplier', 'supplier_name', 'status', 'items', 'item_count', 'total', 'paid_amount', 'remaining_balance', 'payment_status', 'notes', 'expected_delivery', 'ordered_at', 'received_at']
+        fields = ['id', 'reference', 'supplier', 'supplier_name', 'status', 'items', 'item_count', 'total', 'paid_amount', 'remaining_balance', 'payment_status', 'payments', 'notes', 'expected_delivery', 'ordered_at', 'received_at']
         read_only_fields = ['id', 'reference', 'status', 'ordered_at', 'received_at']
 
 

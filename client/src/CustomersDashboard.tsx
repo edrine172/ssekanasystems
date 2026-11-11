@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownLeft, ArrowUpRight, BriefcaseBusiness, Building2, Check, CreditCard, Download, FileText, Mail, MapPin, Phone, Plus, RefreshCw, Search, ShoppingCart, UserRound, Users, Wallet, X } from 'lucide-react';
-import { api, formatCurrency as currency, type Customer, type CustomerDashboardData, type Sale } from './api';
+import { api, formatCurrency as currency, type Customer, type CustomerDashboardData, type CustomerLedgerEntry, type Sale } from './api';
 import { useDataRevision } from './dataSync';
 import './customer-payments.css';
 
@@ -76,6 +76,7 @@ function CustomerPaymentForm({ customer, data, sale, onClose, onSaved }: {
 }) {
   const remainingBalance = sale?.remaining_balance ?? customer.outstanding_balance;
   const [amount, setAmount] = useState(remainingBalance);
+  const [paymentMethod, setPaymentMethod] = useState<CustomerLedgerEntry['payment_method']>('');
   const [reference, setReference] = useState('');
   const [note, setNote] = useState('Account payment received');
   const [error, setError] = useState('');
@@ -89,11 +90,16 @@ function CustomerPaymentForm({ customer, data, sale, onClose, onSaved }: {
       setError(`Enter an amount greater than zero and no more than ${currency(remainingBalance)}.`);
       return;
     }
+    if (!paymentMethod) {
+      setError('Select how the customer payment was received.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
       await api.receiveCustomerPayment(customer.id, {
         amount: paymentAmount.toFixed(2),
+        payment_method: paymentMethod,
         reference: reference.trim(),
         note: note.trim(),
         ...(sale ? { sale: sale.id } : {}),
@@ -118,6 +124,7 @@ function CustomerPaymentForm({ customer, data, sale, onClose, onSaved }: {
       <button type="button" className="catalog-button catalog-button-light" onClick={() => setAmount(remainingBalance)}>Pay in full</button>
     </div>
     <label className="catalog-field">Amount received<input type="number" min="0.01" max={remainingBalance} step="0.01" required value={amount} onChange={(event) => setAmount(event.target.value)}/></label>
+    <label className="catalog-field">Payment method<select required value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as CustomerLedgerEntry['payment_method'])}><option value="">Select a payment method</option><option value="cash">Cash</option><option value="mobile">Mobile money</option><option value="card">Card</option><option value="transfer">Bank transfer</option><option value="check">Check</option></select></label>
     <label className="catalog-field">Reference<input maxLength={80} value={reference} onChange={(event) => setReference(event.target.value)} placeholder="Bank transfer or remittance ID"/></label>
     <label className="catalog-field">Note<input maxLength={240} value={note} onChange={(event) => setNote(event.target.value)}/></label>
     <p className="customer-payment-confirmation">Confirming records this payment, updates the remaining balance, and adds it to the customer ledger.</p>
