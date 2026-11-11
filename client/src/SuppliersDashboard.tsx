@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownLeft, ArrowUpRight, Building2, Check, FileText, Mail, MapPin, Package, Phone, Plus, RefreshCw, Search, ShieldCheck, Truck, Users, Wallet, X } from 'lucide-react';
 import { api, formatCurrency as currency, type Purchase, type Supplier, type SupplierDashboardData } from './api';
+import { useDataRevision } from './dataSync';
 import './supplier-payments.css';
 
 type SupplierTab = 'orders' | 'ledger' | 'catalog';
@@ -119,6 +120,7 @@ export default function SuppliersDashboard({ onOpenPurchases, onOpenInventory }:
   onOpenPurchases: (supplierId: number) => void;
   onOpenInventory: () => void;
 }) {
+  const dataRevision = useDataRevision();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<SupplierDashboardData | null>(null);
@@ -145,7 +147,7 @@ export default function SuppliersDashboard({ onOpenPurchases, onOpenInventory }:
     }
   }
 
-  useEffect(() => { void loadSuppliers(); }, []);
+  useEffect(() => { void loadSuppliers(); }, [dataRevision]);
 
   const filteredSuppliers = useMemo(() => {
     const term = query.trim().toLowerCase();

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Banknote, Barcode, BriefcaseBusiness, Check, CreditCard, Minus, Package, Plus, Printer, Search, Smartphone, Tag, Truck, Users, Wallet, X } from 'lucide-react';
 import { api, formatCurrency as currency, type Customer, type Product, type Sale, type SalesSummary } from './api';
+import { useDataRevision } from './dataSync';
 
 type PaymentMethod = Sale['payment_method'];
 type CartLine = { product: Product; quantity: number; unitPrice: string };
@@ -20,6 +21,7 @@ export default function PosDashboard({ initialCustomerId, onOpenProducts, onOpen
   onOpenInventory: () => void;
   onSaleCompleted: () => Promise<void>;
 }) {
+  const dataRevision = useDataRevision();
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [salesSummary, setSalesSummary] = useState<SalesSummary | null>(null);
@@ -59,7 +61,7 @@ export default function PosDashboard({ initialCustomerId, onOpenProducts, onOpen
     }
   }
 
-  useEffect(() => { void loadData(); }, []);
+  useEffect(() => { void loadData(); }, [dataRevision]);
   useEffect(() => { localStorage.setItem('stockpulse-held-carts', JSON.stringify(heldCarts)); }, [heldCarts]);
   useEffect(() => {
     if (!initialCustomerId || !customers.length || initialCustomerApplied.current) return;

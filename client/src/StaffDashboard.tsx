@@ -13,6 +13,7 @@ import {
   type StaffTask, type StaffTaskAssignment, type StaffTaskEntry, type StaffTaskTargetTier,
 } from './api';
 import { useConfirmation } from './ConfirmDialog';
+import { useDataRevision } from './dataSync';
 
 type DashboardTarget = 'overview' | 'products' | 'inventory' | 'purchases' | 'pos' | 'sales' | 'reports' | 'customers' | 'suppliers' | 'expenses' | 'users' | 'settings';
 type StaffFormValues = Omit<StaffMemberInput, 'hire_date'> & { hire_date: string };
@@ -1131,6 +1132,7 @@ function AdminLogin({ onLogin }: { onLogin: (username: string, password: string)
 }
 
 export default function StaffDashboard({ onNavigate, onSignOut }: { onNavigate: (target: DashboardTarget) => void; onSignOut: () => Promise<void> }) {
+  const dataRevision = useDataRevision();
   const { confirm, dialog } = useConfirmation();
   const [dashboard, setDashboard] = useState<StaffDashboardData | null>(null);
   const [admin, setAdmin] = useState<AccessUser | null>(null);
@@ -1169,7 +1171,7 @@ export default function StaffDashboard({ onNavigate, onSignOut }: { onNavigate: 
       // The dashboard still works when browser storage is unavailable.
     }
     void loadDashboard();
-  }, [period]);
+  }, [period, dataRevision]);
   useEffect(() => {
     try {
       if (selectedWorkerId === null) localStorage.removeItem(payrollWorkerStorageKey);

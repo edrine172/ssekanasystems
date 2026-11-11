@@ -1,4 +1,5 @@
 import { requestMutationConfirmation } from './ConfirmDialog';
+import { notifyDataChanged } from './dataSync';
 
 const configuredApiBase = import.meta.env.VITE_API_BASE_URL?.trim();
 const normalizedApiBase = configuredApiBase?.replace(/\/+$/, '');
@@ -975,6 +976,7 @@ async function request<T>(
       await throwIfAdministratorSessionExpired(retryResponse);
     }
     if (retryResponse.ok) {
+      notifySuccessfulMutation(method, normalizedPath);
       const contentType = retryResponse.headers.get('content-type') ?? '';
       if (retryResponse.status === 204) return undefined as T;
       if (contentType.includes('application/json')) return retryResponse.json() as Promise<T>;
@@ -995,8 +997,15 @@ async function request<T>(
     } catch { /* keep HTTP status */ }
     throw new Error(message);
   }
+  notifySuccessfulMutation(method, normalizedPath);
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
+}
+
+function notifySuccessfulMutation(method: string, path: string) {
+  if (method === 'GET' || path.startsWith('/notifications/')) return;
+  if (/^\/(?:access|account)\/(?:login|logout)\/$/.test(path)) return;
+  notifyDataChanged();
 }
 
 function mutationResourceName(path: string) {

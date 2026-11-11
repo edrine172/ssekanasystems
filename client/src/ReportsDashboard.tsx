@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Boxes, BriefcaseBusiness, ChartNoAxesCombined, Landmark, Package, Pencil, RefreshCw, ShoppingCart, TrendingUp, Truck, X } from 'lucide-react';
 import { api, formatCurrency as currency, getCurrencyDisplay, type BalanceSheetCategory, type BalanceSheetSection, type BalanceSheetSummary, type ReportsSummary } from './api';
+import { useDataRevision } from './dataSync';
 import FileActionMenu from './FileActionMenu';
 
 type ReportTab = 'sales' | 'inventory' | 'purchases' | 'financial' | 'balance-sheet';
@@ -139,6 +140,7 @@ export default function ReportsDashboard({ onOpenInventory, onOpenPurchases, onO
   onOpenPOS: () => void;
   onOpenExpenses: () => void;
 }) {
+  const dataRevision = useDataRevision();
   const [report, setReport] = useState<ReportsSummary | null>(null);
   const [balanceSheet, setBalanceSheet] = useState<BalanceSheetSummary | null>(null);
   const [balanceSheetLoading, setBalanceSheetLoading] = useState(true);
@@ -176,8 +178,8 @@ export default function ReportsDashboard({ onOpenInventory, onOpenPurchases, onO
     }
   }
 
-  useEffect(() => { void loadReport(range, monthMode ? selectedMonth : undefined, dayMode ? selectedDate : undefined); }, [range, monthMode, selectedMonth, dayMode, selectedDate]);
-  useEffect(() => { void loadBalanceSheet(); }, []);
+  useEffect(() => { void loadReport(range, monthMode ? selectedMonth : undefined, dayMode ? selectedDate : undefined); }, [range, monthMode, selectedMonth, dayMode, selectedDate, dataRevision]);
+  useEffect(() => { void loadBalanceSheet(); }, [dataRevision]);
 
   const series = report?.daily_series ?? [];
   const chartSeries = (() => {

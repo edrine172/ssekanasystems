@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowDownRight, ArrowUpRight, Boxes, ChartNoAxesCombined, ChevronDown, CircleAlert, ListFilter, Package, RefreshCw, TrendingUp, Truck } from 'lucide-react';
 import { api, formatCurrency as currency, type DashboardSummary, type StockMovement } from './api';
+import { useDataRevision } from './dataSync';
 
 const FLOW_RANGES = [
   { value: '1d', label: '1 day', days: 1 },
@@ -28,6 +29,7 @@ const currentDate = () => {
 };
 
 export default function DashboardOverview({ onOpenProducts, onOpenInventory, onOpenPurchases, onOpenPOS, onOpenReports, onOpenExpenses }: { onOpenProducts: () => void; onOpenInventory: () => void; onOpenPurchases: () => void; onOpenPOS: () => void; onOpenReports: () => void; onOpenExpenses: () => void }) {
+  const dataRevision = useDataRevision();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [flowRange, setFlowRange] = useState<FlowRange>('1d');
   const [flowMonthMode, setFlowMonthMode] = useState(false);
@@ -67,7 +69,7 @@ export default function DashboardOverview({ onOpenProducts, onOpenInventory, onO
     }
   }
 
-  useEffect(() => { void loadSummary(); void loadInventoryFlow(); }, []);
+  useEffect(() => { void loadSummary(); void loadInventoryFlow(); }, [dataRevision]);
 
   const maxTrend = summary ? Math.max(...summary.series.flatMap((day) => [day.sales, day.purchases]), 1) : 1;
   const labelIndexes = summary ? new Set([0, Math.floor((summary.series.length - 1) / 2), summary.series.length - 1]) : new Set<number>();

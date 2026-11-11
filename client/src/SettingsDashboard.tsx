@@ -6,6 +6,7 @@ import {
   Truck, Users, Webhook, X,
 } from 'lucide-react';
 import { api, getCurrencyDisplay, setCurrencyDisplay, type AccessUser, type ExchangeRatesData, type SettingsAuditEvent, type SystemSettings } from './api';
+import { useDataRevision } from './dataSync';
 import FileActionMenu from './FileActionMenu';
 import { useConfirmation } from './ConfirmDialog';
 
@@ -29,6 +30,7 @@ function AuditValue({ value }: { value: unknown }) {
 }
 
 export default function SettingsDashboard({ onNavigate, onSignOut }: { onNavigate: (target: DashboardTarget) => void; onSignOut: () => Promise<void> }) {
+  const dataRevision = useDataRevision();
   const { confirm, dialog } = useConfirmation();
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [exchangeRates, setExchangeRates] = useState<ExchangeRatesData | null>(null);
@@ -38,6 +40,7 @@ export default function SettingsDashboard({ onNavigate, onSignOut }: { onNavigat
   const [admin, setAdmin] = useState<AccessUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [settingsDirty, setSettingsDirty] = useState(false);
   const [loginBusy, setLoginBusy] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -68,6 +71,7 @@ export default function SettingsDashboard({ onNavigate, onSignOut }: { onNavigat
       void loadExchangeRates();
       const response = await api.systemSettings();
       setSettings(response.settings);
+      setSettingsDirty(false);
       setAuditLog(response.audit_log);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Settings could not be loaded.';
@@ -83,7 +87,9 @@ export default function SettingsDashboard({ onNavigate, onSignOut }: { onNavigat
     }
   }
 
-  useEffect(() => { void loadSettings(); }, []);
+  useEffect(() => {
+    if (!settingsDirty) void loadSettings();
+  }, [dataRevision]);
 
   async function signIn(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,6 +101,7 @@ export default function SettingsDashboard({ onNavigate, onSignOut }: { onNavigat
       setPassword('');
       const response = await api.systemSettings();
       setSettings(response.settings);
+      setSettingsDirty(false);
       setAuditLog(response.audit_log);
       void loadExchangeRates();
     } catch (cause) {
@@ -124,6 +131,7 @@ export default function SettingsDashboard({ onNavigate, onSignOut }: { onNavigat
       ...current,
       [category]: { ...current[category], [key]: value },
     } : current);
+    setSettingsDirty(true);
   }
 
   async function saveSettings() {
@@ -134,6 +142,7 @@ export default function SettingsDashboard({ onNavigate, onSignOut }: { onNavigat
     try {
       const response = await api.updateSystemSettings(settings);
       setSettings(response.settings);
+      setSettingsDirty(false);
       setAuditLog(response.audit_log);
       const currentDisplay = getCurrencyDisplay();
       setCurrencyDisplay(response.settings.organization.currency, exchangeRates?.rates ?? currentDisplay.rates, exchangeRates?.updated_at ?? currentDisplay.updatedAt);
@@ -163,6 +172,7 @@ export default function SettingsDashboard({ onNavigate, onSignOut }: { onNavigat
       setSaving(true);
       const response = await api.updateSystemSettings(candidate as Partial<SystemSettings>);
       setSettings(response.settings);
+      setSettingsDirty(false);
       setAuditLog(response.audit_log);
       const currentDisplay = getCurrencyDisplay();
       setCurrencyDisplay(response.settings.organization.currency, exchangeRates?.rates ?? currentDisplay.rates, exchangeRates?.updated_at ?? currentDisplay.updatedAt);

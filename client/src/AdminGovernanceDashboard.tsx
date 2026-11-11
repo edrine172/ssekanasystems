@@ -10,6 +10,7 @@ import {
   type SecurityAuditEvent, type SettingsAuditEvent, type StaffDashboardData,
   type SystemSettingsData,
 } from './api';
+import { useDataRevision } from './dataSync';
 const UsersDashboard = lazy(() => import('./UsersDashboard'));
 const SettingsDashboard = lazy(() => import('./SettingsDashboard'));
 
@@ -112,6 +113,7 @@ function downloadAudit(rows: AuditRow[]) {
 }
 
 export default function AdminGovernanceDashboard() {
+  const dataRevision = useDataRevision();
   const [admin, setAdmin] = useState<AccessUser | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState('');
@@ -170,7 +172,7 @@ export default function AdminGovernanceDashboard() {
       if (current) setDataError(cause instanceof Error ? cause.message : 'Administration data could not be loaded.');
     }).finally(() => { if (current) setLoadingData(false); });
     return () => { current = false; };
-  }, [activeSection, admin, reloadVersion]);
+  }, [activeSection, admin, reloadVersion, dataRevision]);
 
   async function signIn(username: string, password: string) {
     const result = await api.accessLogin(username, password);

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownToLine, Check, ChevronDown, CircleAlert, FileText, Package, Plus, RefreshCw, Search, Truck, X } from 'lucide-react';
 import { api, formatCurrency as currency, type InventoryAdjustment, type Product, type Purchase, type PurchaseSummary, type Supplier } from './api';
+import { useDataRevision } from './dataSync';
 
 type PurchaseStatusFilter = 'All orders' | 'Ordered' | 'Received' | 'Cancelled';
 type PurchaseLineDraft = { product: string; quantity: string; unit_cost: string };
@@ -210,6 +211,7 @@ export default function PurchasesDashboard({ initialSupplierId = null, onInitial
   onOpenInventory: () => void;
   onOpenProducts: () => void;
 }) {
+  const dataRevision = useDataRevision();
   const [preselectedSupplierId] = useState(initialSupplierId);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [summary, setSummary] = useState<PurchaseSummary | null>(null);
@@ -248,7 +250,7 @@ export default function PurchasesDashboard({ initialSupplierId = null, onInitial
     }
   }
 
-  useEffect(() => { void loadData(); }, []);
+  useEffect(() => { void loadData(); }, [dataRevision]);
   useEffect(() => {
     if (!initialSupplierId) return;
     setShowForm(true);

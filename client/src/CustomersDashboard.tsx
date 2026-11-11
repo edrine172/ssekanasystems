@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownLeft, ArrowUpRight, BriefcaseBusiness, Building2, Check, CreditCard, Download, FileText, Mail, MapPin, Phone, Plus, RefreshCw, Search, ShoppingCart, UserRound, Users, Wallet, X } from 'lucide-react';
 import { api, formatCurrency as currency, type Customer, type CustomerDashboardData, type Sale } from './api';
+import { useDataRevision } from './dataSync';
 import './customer-payments.css';
 
 type CustomerTab = 'orders' | 'ledger' | 'account';
@@ -129,6 +130,7 @@ export default function CustomersDashboard({ onStartSale, onOpenSales }: {
   onStartSale: (customerId: number) => void;
   onOpenSales: () => void;
 }) {
+  const dataRevision = useDataRevision();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [detail, setDetail] = useState<CustomerDashboardData | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -158,7 +160,7 @@ export default function CustomersDashboard({ onStartSale, onOpenSales }: {
     }
   }
 
-  useEffect(() => { void loadCustomers(); }, []);
+  useEffect(() => { void loadCustomers(); }, [dataRevision]);
 
   const filteredCustomers = useMemo(() => {
     const term = query.trim().toLowerCase();

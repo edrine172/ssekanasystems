@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpRight, Check, ChevronDown, CircleAlert, Landmark, Pencil, Plus, ReceiptText, RefreshCw, Search, Settings2, ShieldCheck, Trash2, Wallet, X } from 'lucide-react';
 import { api, formatCurrency as currency, type BalanceSheetCategory, type BalanceSheetSection, type BalanceSheetSummary, type Expense, type ExpenseBudget, type ExpenseCategoryOption, type ExpenseInput, type ExpenseOptions, type ExpenseSummary, type ExpenseTypeOption } from './api';
+import { useDataRevision } from './dataSync';
 import { downloadSpreadsheet, readSpreadsheetRows } from './fileFormats';
 import FileActionMenu from './FileActionMenu';
 
@@ -181,6 +182,7 @@ function BudgetForm({ initial, onClose, onSaved }: {
 }
 
 function BalanceSheetPanel() {
+  const dataRevision = useDataRevision();
   const [sheet, setSheet] = useState<BalanceSheetSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -198,7 +200,7 @@ function BalanceSheetPanel() {
     finally { setLoading(false); }
   }
 
-  useEffect(() => { void loadSheet(); }, []);
+  useEffect(() => { void loadSheet(); }, [dataRevision]);
 
   function startEdit(account: NonNullable<typeof editing>) {
     setEditing(account);
@@ -278,6 +280,7 @@ function BalanceSheetPanel() {
 }
 
 export default function ExpensesDashboard({ onOpenReports }: { onOpenReports: () => void }) {
+  const dataRevision = useDataRevision();
   const [summary, setSummary] = useState<ExpenseSummary | null>(null);
   const [expenseOptions, setExpenseOptions] = useState<ExpenseOptions>({ categories: [], types: [] });
   const [expenseOptionsLoading, setExpenseOptionsLoading] = useState(true);
@@ -314,8 +317,8 @@ export default function ExpensesDashboard({ onOpenReports }: { onOpenReports: ()
     finally { setExpenseOptionsLoading(false); }
   }
 
-  useEffect(() => { void loadSummary(); }, [month]);
-  useEffect(() => { void loadExpenseOptions(); }, []);
+  useEffect(() => { void loadSummary(); }, [month, dataRevision]);
+  useEffect(() => { void loadExpenseOptions(); }, [dataRevision]);
 
   const expenses = useMemo(() => (summary?.expenses ?? []).filter((expense) => {
     const term = search.trim().toLowerCase();

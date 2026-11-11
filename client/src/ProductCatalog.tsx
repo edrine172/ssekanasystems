@@ -10,6 +10,7 @@ import { downloadSpreadsheet, readSpreadsheetRows } from './fileFormats';
 import FileActionMenu from './FileActionMenu';
 import type { NotificationDashboard } from './api';
 import { useConfirmation } from './ConfirmDialog';
+import { useDataRevision } from './dataSync';
 
 const DashboardOverview = lazy(() => import('./DashboardOverview'));
 const InventoryDashboard = lazy(() => import('./InventoryDashboard'));
@@ -174,6 +175,7 @@ function CategoryManager({ categories, onClose, onChanged }: {
 }
 
 export default function ProductCatalog() {
+  const dataRevision = useDataRevision();
   const { confirm, dialog } = useConfirmation();
   const currencyDisplay = useSyncExternalStore(subscribeCurrencyDisplay, getCurrencyDisplay, getCurrencyDisplay);
   const [activeView, setActiveViewState] = useState<NotificationDashboard | 'home' | 'auth'>('home');
@@ -311,8 +313,8 @@ export default function ProductCatalog() {
     } finally { setLoading(false); }
   }
   useEffect(() => {
-    if (activeView === 'overview') void loadData();
-  }, [activeView]);
+    if (activeView === 'overview' || activeView === 'products') void loadData();
+  }, [activeView, dataRevision]);
   useEffect(() => { setPage(1); }, [query, categoryFilter, supplierFilter, statusFilter, availabilityFilter, sort, pageSize]);
   useEffect(() => { setSelected([]); }, [page, pageSize, query, categoryFilter, supplierFilter, statusFilter, availabilityFilter]);
 

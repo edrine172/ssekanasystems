@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Bell, CheckCheck, Clock3, Package, RefreshCw, Truck, WalletCards, X } from 'lucide-react';
 import { api, type AppNotification, type NotificationCategory, type NotificationDashboard } from './api';
+import { useDataRevision } from './dataSync';
 
 const categoryLabels: Record<NotificationCategory, string> = {
   stock: 'Stock alerts',
@@ -38,6 +39,7 @@ function relativeTime(value: string) {
 }
 
 export default function NotificationCenter({ onNavigate }: { onNavigate: (view: NotificationDashboard) => void }) {
+  const dataRevision = useDataRevision();
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | NotificationCategory>('all');
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -60,7 +62,7 @@ export default function NotificationCenter({ onNavigate }: { onNavigate: (view: 
     void loadNotifications();
     const interval = window.setInterval(() => { void loadNotifications(); }, 45_000);
     return () => { mounted = false; window.clearInterval(interval); };
-  }, []);
+  }, [dataRevision]);
 
   useEffect(() => {
     if (!open) return;

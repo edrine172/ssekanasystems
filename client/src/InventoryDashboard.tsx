@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ChevronDown, ClipboardCheck, Package, Plus, RefreshCw, Search, Truck, Warehouse, X } from 'lucide-react';
 import { api, formatCurrency as currency, type DashboardSummary, type InventoryAdjustment, type Product, type StockMovement } from './api';
+import { useDataRevision } from './dataSync';
 
 type AdjustmentType = InventoryAdjustment['adjustment_type'];
 type StockFilter = 'All stock' | 'In stock' | 'Low stock' | 'Out of stock';
@@ -101,6 +102,7 @@ export default function InventoryDashboard({ onOpenProducts, onOpenPurchases, on
   onOpenPurchases: () => void;
   onInventoryChanged: () => Promise<void>;
 }) {
+  const dataRevision = useDataRevision();
   const [products, setProducts] = useState<Product[]>([]);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [auditMovements, setAuditMovements] = useState<InventoryHistoryEntry[]>([]);
@@ -175,7 +177,7 @@ export default function InventoryDashboard({ onOpenProducts, onOpenPurchases, on
     }
   }
 
-  useEffect(() => { void loadData(); }, []);
+  useEffect(() => { void loadData(); }, [dataRevision]);
 
   const categories = useMemo(() => [...new Set(products.map((product) => product.category_name).filter(Boolean))].sort(), [products]);
   const filteredProducts = useMemo(() => {

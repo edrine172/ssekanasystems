@@ -10,6 +10,7 @@ import {
   type Customer,
   type Product,
 } from './api';
+import { useDataRevision } from './dataSync';
 import { useConfirmation } from './ConfirmDialog';
 
 type DashboardTab = 'bottle-orders' | 'material-orders' | 'bottle-catalog' | 'material-catalog';
@@ -24,6 +25,7 @@ const dateLabel = (value: string | null) => value
   : 'Not scheduled';
 
 export default function PurchaseOrderClient() {
+  const dataRevision = useDataRevision();
   const { confirm, dialog } = useConfirmation();
   const [tab, setTab] = useState<DashboardTab>('bottle-orders');
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -91,7 +93,7 @@ export default function PurchaseOrderClient() {
     }
   }
 
-  useEffect(() => { void loadData(); }, []);
+  useEffect(() => { void loadData(); }, [dataRevision]);
 
   const activeBottleProducts = bottleProducts.filter((product) => product.is_active);
   const unlinkedInventoryProducts = inventoryProducts.filter((product) => !bottleProducts.some((bottleProduct) => bottleProduct.id === product.id));
