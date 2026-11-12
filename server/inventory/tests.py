@@ -25,6 +25,7 @@ from .models import BalanceSheetAccount, BottleCustomerPO, BottleDelivery, Bottl
 
 class AdminAPITestCase(APITestCase):
     def setUp(self):
+        cache.clear()
         self.admin = get_user_model().objects.create_superuser(
             username='dashboard-admin',
             password='test-password',
@@ -375,6 +376,7 @@ class NotificationTests(AdminAPITestCase):
 
 class StaffPayrollTests(APITestCase):
     def setUp(self):
+        cache.clear()
         self.admin = get_user_model().objects.create_superuser(username='payroll-admin', password='test-password')
         self.client.force_authenticate(user=self.admin)
 
@@ -2682,6 +2684,9 @@ class ExpenseDashboardTests(AdminAPITestCase):
 
 
 class DashboardAccountTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+
     def test_registration_accepts_gmail_addresses(self):
         registered = self.client.post('/api/account/register/', {
             'username': 'gmail-member',

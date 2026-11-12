@@ -7,6 +7,44 @@ const API_BASE = normalizedApiBase
   ? (normalizedApiBase.endsWith('/api') ? normalizedApiBase : `${normalizedApiBase}/api`)
   : (import.meta.env.DEV ? 'http://localhost:8000/api' : '');
 let accessCsrfToken = '';
+const GET_CACHE_TTL_MS = 5000;
+const getResponseCache = new Map<string, { expiresAt: number; value: unknown }>();
+const inFlightGetRequests = new Map<string, Promise<unknown>>();
+let getCacheGeneration = 0;
+let accessToken = '';
+let accessTokenExpiresAt = 0;
+let tokenRefreshRequest: Promise<boolean> | null = null;
+
+function invalidateGetCache() {
+  getCacheGeneration += 1;
+  getResponseCache.clear();
+  inFlightGetRequests.clear();
+}
+
+function setAccessToken(token: string | null) {
+  const nextToken = token ?? '';
+  if (nextToken === accessToken) return;
+  accessToken = '';
+  accessTokenExpiresAt = 0;
+  invalidateGetCache();
+  if (!nextToken) return;
+  const encodedClaims = nextToken.split('.')[1];
+  if (!encodedClaims) throw new Error('The server returned an invalid access token.');
+  let claims: { exp?: unknown };
+  try {
+    const base64Claims = encodedClaims.replace(/-/g, '+').replace(/_/g, '/')
+      .padEnd(Math.ceil(encodedClaims.length / 4) * 4, '=');
+    claims = JSON.parse(atob(base64Claims)) as { exp?: unknown };
+  } catch {
+    throw new Error('The server returned an invalid access token.');
+  }
+  if (typeof claims.exp !== 'number' || !Number.isFinite(claims.exp)) {
+    throw new Error('The server returned an invalid access token expiry.');
+  }
+  accessToken = nextToken;
+  accessTokenExpiresAt = claims.exp * 1000;
+  invalidateGetCache();
+}
 
 export class AdministratorSessionExpiredError extends Error {
   constructor() {
@@ -41,6 +79,7 @@ async function throwIfAdministratorSessionExpired(response: Response) {
   if (response.status !== 401 && response.status !== 403) return;
   const body = await response.clone().text();
   if (!isAdministratorSessionExpired(response.status, body)) return;
+  setAccessToken(null);
   administratorSessionExpiredListeners.forEach((listener) => listener());
   throw new AdministratorSessionExpiredError();
 }
@@ -883,6 +922,32 @@ async function ensureCsrfToken() {
   accessCsrfToken = csrfData.csrf_token;
 }
 
+async function refreshAccessToken(): Promise<boolean> {
+  if (tokenRefreshRequest) return tokenRefreshRequest;
+  tokenRefreshRequest = (async () => {
+    await ensureCsrfToken();
+    const response = await fetchWithNetworkRetries(apiUrl('/access/token/refresh/'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'X-CSRFToken': accessCsrfToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    if (response.status === 401) {
+      setAccessToken(null);
+      return false;
+    }
+    if (!response.ok) throw new Error(`Could not refresh the access token (HTTP ${response.status}).`);
+    const result = await response.json() as { access_token: string };
+    setAccessToken(result.access_token);
+    return true;
+  })();
+  try {
+    return await tokenRefreshRequest;
+  } finally {
+    tokenRefreshRequest = null;
+  }
+}
+
 function formatApiErrorBody(body: unknown, status: number) {
   const flatten = (value: unknown, path = ''): string[] => {
     if (Array.isArray(value)) return value.flatMap((item, index) => flatten(item, path ? `${path}[${index}]` : String(index)));
@@ -895,7 +960,7 @@ function formatApiErrorBody(body: unknown, status: number) {
   return flatten(body).join('; ') || `API request failed (${status})`;
 }
 
-async function request<T>(
+async function requestUncached<T>(
   path: string,
   options?: RequestInit,
   confirmationMode: 'required' | 'skip' = 'required',
@@ -956,6 +1021,12 @@ async function request<T>(
     headers.set('X-CSRFToken', accessCsrfToken);
   }
 
+  const omitAccessToken = ['/access/login/', '/account/login/', '/account/register/'].includes(normalizedPath);
+  if (!omitAccessToken && accessToken && accessTokenExpiresAt <= Date.now() + 30_000) {
+    await refreshAccessToken();
+  }
+  if (!omitAccessToken && accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+
   const response = method === 'GET'
     ? await fetchGet(apiUrl(path), { ...options, credentials: 'include', headers })
     : retryNetworkFailures
@@ -1008,8 +1079,50 @@ async function request<T>(
   return response.json() as Promise<T>;
 }
 
+async function request<T>(
+  path: string,
+  options?: RequestInit,
+  confirmationMode: 'required' | 'skip' = 'required',
+  retryNetworkFailures = false,
+): Promise<T> {
+  const method = options?.method?.toUpperCase() ?? 'GET';
+  if (
+    method !== 'GET'
+    || options?.headers
+    || options?.signal
+    || (options?.credentials && options.credentials !== 'include')
+  ) {
+    return requestUncached<T>(path, options, confirmationMode, retryNetworkFailures);
+  }
+
+  const cacheKey = apiUrl(path);
+  const cached = getResponseCache.get(cacheKey);
+  if (cached) {
+    if (cached.expiresAt > Date.now()) return structuredClone(cached.value) as T;
+    getResponseCache.delete(cacheKey);
+  }
+
+  const inFlight = inFlightGetRequests.get(cacheKey);
+  if (inFlight) return inFlight.then((value) => structuredClone(value) as T);
+
+  const generation = getCacheGeneration;
+  const pendingRequest = requestUncached<T>(path, options, confirmationMode, retryNetworkFailures);
+  inFlightGetRequests.set(cacheKey, pendingRequest);
+  try {
+    const value = await pendingRequest;
+    if (value !== undefined && generation === getCacheGeneration) {
+      getResponseCache.set(cacheKey, { expiresAt: Date.now() + GET_CACHE_TTL_MS, value });
+    }
+    return structuredClone(value) as T;
+  } finally {
+    if (inFlightGetRequests.get(cacheKey) === pendingRequest) inFlightGetRequests.delete(cacheKey);
+  }
+}
+
 function notifySuccessfulMutation(method: string, path: string) {
-  if (method === 'GET' || path.startsWith('/notifications/')) return;
+  if (method === 'GET') return;
+  invalidateGetCache();
+  if (path.startsWith('/notifications/')) return;
   if (/^\/(?:access|account)\/(?:login|logout)\/$/.test(path)) return;
   notifyDataChanged();
 }
@@ -1064,23 +1177,32 @@ async function accountAuthRequest(path: string, payload: Record<string, string>)
   if (!csrfResponse.ok) throw csrfInitializationError(csrfResponse);
   const csrfData = await csrfResponse.json() as { csrf_token: string };
   accessCsrfToken = csrfData.csrf_token;
-  const result = await request<{ user: AccessUser; csrf_token: string }>(path, { method: 'POST', body: JSON.stringify(payload) });
+  const result = await request<{ user: AccessUser; csrf_token: string; access_token: string }>(path, { method: 'POST', body: JSON.stringify(payload) });
   accessCsrfToken = result.csrf_token;
+  setAccessToken(result.access_token);
   return result;
 }
 
 export const api = {
   accountSignIn: (username: string, password: string) => accountAuthRequest('/account/login/', { username, password }),
   accountSignUp: (account: { username: string; password: string; email: string; first_name: string; last_name: string }) => accountAuthRequest('/account/register/', account),
-  accountSession: () => request<{ user: AccessUser }>('/account/session/'),
-  accountLogout: () => request<{ ok: boolean }>('/account/logout/', { method: 'POST', body: JSON.stringify({}) }),
+  async accountSession() {
+    await refreshAccessToken();
+    return request<{ user: AccessUser }>('/account/session/');
+  },
+  async accountLogout() {
+    const result = await request<{ ok: boolean }>('/account/logout/', { method: 'POST', body: JSON.stringify({}) });
+    setAccessToken(null);
+    return result;
+  },
   async accessLogin(username: string, password: string) {
     const csrfResponse = await fetch(apiUrl('/access/csrf/'), { credentials: 'include' });
     if (!csrfResponse.ok) throw csrfInitializationError(csrfResponse);
     const csrfData = await csrfResponse.json() as { csrf_token: string };
     accessCsrfToken = csrfData.csrf_token;
-    const result = await request<{ user: AccessUser; csrf_token: string }>('/access/login/', { method: 'POST', body: JSON.stringify({ username, password }) });
+    const result = await request<{ user: AccessUser; csrf_token: string; access_token: string }>('/access/login/', { method: 'POST', body: JSON.stringify({ username, password }) });
     accessCsrfToken = result.csrf_token;
+    setAccessToken(result.access_token);
     return result;
   },
   async accessSession() {
@@ -1088,9 +1210,14 @@ export const api = {
     if (!response.ok) throw csrfInitializationError(response);
     const csrf = await response.json() as { csrf_token: string };
     accessCsrfToken = csrf.csrf_token;
+    await refreshAccessToken();
     return request<{ user: AccessUser }>('/access/session/');
   },
-  accessLogout: () => request<{ ok: boolean }>('/access/logout/', { method: 'POST', body: JSON.stringify({}) }),
+  async accessLogout() {
+    const result = await request<{ ok: boolean }>('/access/logout/', { method: 'POST', body: JSON.stringify({}) });
+    setAccessToken(null);
+    return result;
+  },
   accessDashboard: () => request<AccessDashboardData>('/access/dashboard/'),
   async downloadSystemBackup() {
     const response = await fetchGet(apiUrl('/system/backup/'), { credentials: 'include' });
@@ -1153,6 +1280,8 @@ export const api = {
     }
     const disposition = response.headers.get('Content-Disposition') ?? '';
     const filename = /filename="?([^";]+)"?/i.exec(disposition)?.[1] ?? 'stockpulse-pre-restore-safety-backup.json.gz';
+    invalidateGetCache();
+    notifyDataChanged();
     return {
       blob: await response.blob(),
       filename,

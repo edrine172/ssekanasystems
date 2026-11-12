@@ -57,6 +57,10 @@ class Sale(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['customer', '-created_at'], name='sale_customer_created_idx'),
+            models.Index(fields=['payment_method', '-created_at'], name='sale_method_created_idx'),
+        ]
 
     def __str__(self):
         return self.receipt_number
@@ -86,6 +90,10 @@ class CustomerLedgerEntry(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['customer', '-created_at'], name='cust_ledger_created_idx'),
+            models.Index(fields=['sale', 'entry_type'], name='cust_ledger_sale_type_idx'),
+        ]
 
     def __str__(self):
         return f'{self.get_entry_type_display()} {self.amount} for {self.customer.customer_code}'

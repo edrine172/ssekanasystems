@@ -63,6 +63,9 @@ class Notification(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['is_active', 'is_dismissed', '-created_at'], name='notification_active_recent_idx'),
+        ]
 
     def __str__(self):
         return self.title

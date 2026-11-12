@@ -19,6 +19,10 @@ class Purchase(models.Model):
 
     class Meta:
         ordering = ['-ordered_at']
+        indexes = [
+            models.Index(fields=['supplier', '-ordered_at'], name='purchase_supplier_date_idx'),
+            models.Index(fields=['status', 'expected_delivery'], name='purchase_status_due_idx'),
+        ]
 
     def __str__(self):
         return self.reference
@@ -48,6 +52,10 @@ class SupplierLedgerEntry(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['supplier', '-created_at'], name='supp_ledger_created_idx'),
+            models.Index(fields=['purchase', 'entry_type'], name='supp_ledger_purchase_type_idx'),
+        ]
 
     def __str__(self):
         return f'{self.get_entry_type_display()} {self.amount} for {self.supplier.supplier_code}'

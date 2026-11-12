@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from .backups import download_database_backup, restore_database_backup
-from .access_control import AccessDashboardViewSet, AccessGroupViewSet, AccessPermissionViewSet, AccessUserViewSet, access_csrf, access_login, access_logout, access_session, account_login, account_logout, account_register, account_session
+from .access_control import AccessDashboardViewSet, AccessGroupViewSet, AccessPermissionViewSet, AccessUserViewSet, access_csrf, access_login, access_logout, access_session, access_token_refresh, account_login, account_logout, account_register, account_session
 from .catalog_views import CategoryViewSet, CustomerViewSet, SupplierViewSet
 from .dashboard_views import dashboard_summary
 from .expense_views import ExpenseBudgetViewSet, ExpenseViewSet, delete_expense_category, delete_expense_type, expense_options, expenses_bulk_upload, expenses_summary
@@ -43,6 +43,7 @@ urlpatterns = [
     path('system/backup/restore/', restore_database_backup, name='system-backup-restore'),
     path('access/csrf/', access_csrf, name='access-csrf'),
     path('access/login/', access_login, name='access-login'),
+    path('access/token/refresh/', access_token_refresh, name='access-token-refresh'),
     path('access/session/', access_session, name='access-session'),
     path('access/logout/', access_logout, name='access-logout'),
     path('account/register/', account_register, name='account-register'),

@@ -1,8 +1,10 @@
 import json
+import math
 from json import JSONDecodeError
 
 from django.contrib.auth import authenticate, get_user_model, login, logout, update_session_auth_hash
 from django.contrib.auth.models import Group, Permission
+from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
 from django.core.cache import cache
@@ -14,16 +16,68 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 from rest_framework import serializers, viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import BasePermission
+from rest_framework.permissions import AllowAny, BasePermission
 from rest_framework.response import Response
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import SecurityAuditEvent
+from .throttling import AtomicRateThrottle
 
 User = get_user_model()
 ACCESS_DASHBOARD_CACHE_KEY = 'access_dashboard_payload'
 ACCESS_DASHBOARD_CACHE_TIMEOUT = 30
+
+
+class AuthEndpointThrottle(AtomicRateThrottle):
+    scope = 'auth_login'
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {
+            'scope': self.scope,
+            'ident': self.get_ident(request),
+        }
+
+
+def _auth_rate_limit_response(request):
+    throttle = AuthEndpointThrottle()
+    if throttle.allow_request(request, None):
+        return None
+    response = JsonResponse({'detail': 'Too many authentication attempts. Try again later.'}, status=429)
+    if retry_after := throttle.wait():
+        response['Retry-After'] = str(math.ceil(retry_after))
+    return response
+
+
+def _authentication_response(request, user, status=200):
+    refresh = RefreshToken.for_user(user)
+    response = JsonResponse({
+        'user': _user_payload(user),
+        'csrf_token': get_token(request),
+        'access_token': str(refresh.access_token),
+    }, status=status)
+    response.set_cookie(
+        'stockpulse_refresh',
+        str(refresh),
+        max_age=int(api_settings.REFRESH_TOKEN_LIFETIME.total_seconds()),
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite='None' if not settings.DEBUG else 'Lax',
+        path='/api/access/token/refresh/',
+    )
+    return response
+
+
+def _clear_refresh_cookie(response):
+    response.delete_cookie(
+        'stockpulse_refresh',
+        path='/api/access/token/refresh/',
+        samesite='None' if not settings.DEBUG else 'Lax',
+    )
+    return response
 
 
 def _user_payload(user):
@@ -52,6 +106,8 @@ def access_csrf(request):
 @csrf_protect
 @require_POST
 def access_login(request):
+    if rate_limited := _auth_rate_limit_response(request):
+        return rate_limited
     try:
         data = json.loads(request.body or '{}')
     except JSONDecodeError:
@@ -61,10 +117,26 @@ def access_login(request):
         return JsonResponse({'detail': 'Administrator sign-in failed.'}, status=400)
     login(request, user)
     _audit(user, 'session.login', 'user', user.pk)
-    return JsonResponse({'user': _user_payload(user), 'csrf_token': get_token(request)})
+    return _authentication_response(request, user)
 
 
-@require_GET
+@csrf_protect
+@require_POST
+def access_token_refresh(request):
+    if rate_limited := _auth_rate_limit_response(request):
+        return rate_limited
+    refresh_token = request.COOKIES.get('stockpulse_refresh')
+    if not refresh_token:
+        return JsonResponse({'detail': 'Refresh token is missing.'}, status=401)
+    serializer = TokenRefreshSerializer(data={'refresh': refresh_token})
+    if not serializer.is_valid():
+        response = JsonResponse({'detail': 'Refresh token is invalid or expired.'}, status=401)
+        return _clear_refresh_cookie(response)
+    return JsonResponse({'access_token': serializer.validated_data['access']})
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def access_session(request):
     if not request.user.is_authenticated or not request.user.is_active or not request.user.is_staff:
         return JsonResponse({'detail': 'Workspace sign-in required.'}, status=401)
@@ -78,12 +150,14 @@ def access_logout(request):
         return JsonResponse({'detail': 'Administrator sign-in required.'}, status=401)
     _audit(request.user, 'session.logout', 'user', request.user.pk)
     logout(request)
-    return JsonResponse({'ok': True})
+    return _clear_refresh_cookie(JsonResponse({'ok': True}))
 
 
 @csrf_protect
 @require_POST
 def account_register(request):
+    if rate_limited := _auth_rate_limit_response(request):
+        return rate_limited
     try:
         data = json.loads(request.body or '{}')
     except JSONDecodeError:
@@ -118,12 +192,14 @@ def account_register(request):
     user.groups.add(_registered_user_group())
     login(request, user)
     _audit(user, 'session.registered', 'user', user.pk)
-    return JsonResponse({'user': _user_payload(user), 'csrf_token': get_token(request)}, status=201)
+    return _authentication_response(request, user, status=201)
 
 
 @csrf_protect
 @require_POST
 def account_login(request):
+    if rate_limited := _auth_rate_limit_response(request):
+        return rate_limited
     try:
         data = json.loads(request.body or '{}')
     except JSONDecodeError:
@@ -135,10 +211,11 @@ def account_login(request):
         return JsonResponse({'detail': 'Administrator sign-in failed.'}, status=400)
     login(request, user)
     _audit(user, 'session.login', 'user', user.pk)
-    return JsonResponse({'user': _user_payload(user), 'csrf_token': get_token(request)})
+    return _authentication_response(request, user)
 
 
-@require_GET
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def account_session(request):
     if not request.user.is_authenticated or not request.user.is_active or not (request.user.is_staff or request.user.is_superuser):
         return JsonResponse({'detail': 'Administrator sign-in is required.'}, status=401)
@@ -152,7 +229,7 @@ def account_logout(request):
         return JsonResponse({'detail': 'Sign in is required.'}, status=401)
     _audit(request.user, 'session.logout', 'user', request.user.pk)
     logout(request)
-    return JsonResponse({'ok': True})
+    return _clear_refresh_cookie(JsonResponse({'ok': True}))
 
 
 class IsAdmin(BasePermission):

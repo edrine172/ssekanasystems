@@ -43,6 +43,10 @@ class Expense(models.Model):
 
     class Meta:
         ordering = ['-expense_date', '-created_at']
+        indexes = [
+            models.Index(fields=['expense_date', 'status'], name='expense_date_status_idx'),
+            models.Index(fields=['status', '-created_at'], name='expense_status_created_idx'),
+        ]
 
     def __str__(self):
         return f'{self.expense_number} · {self.merchant}'
